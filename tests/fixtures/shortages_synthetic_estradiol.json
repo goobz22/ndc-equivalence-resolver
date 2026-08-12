@@ -1,0 +1,17 @@
+{
+  "meta": {"last_updated": "2026-08-12", "results": {"total": 1}},
+  "results": [
+    {
+      "update_type": "New",
+      "initial_posting_date": "04/15/2026",
+      "package_ndc": "0378-4642-26",
+      "generic_name": "Estradiol Transdermal System",
+      "availability": "Unavailable",
+      "shortage_reason": "Demand increase for the drug",
+      "update_date": "07/30/2026",
+      "dosage_form": "Patch",
+      "company_name": "Mylan Pharmaceuticals Inc.",
+      "status": "Current"
+    }
+  ]
+}
