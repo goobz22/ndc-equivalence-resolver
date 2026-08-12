@@ -1,0 +1,54 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ndcres"
+version = "0.1.0"
+description = "NDC Equivalence Resolver — offline-first therapeutic-equivalence and supply-stress lookup over public FDA/NLM/CMS data"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Matthew Goluba" }]
+requires-python = ">=3.12"
+keywords = ["ndc", "orange-book", "therapeutic-equivalence", "drug-shortage", "nadac", "rxnorm", "pharmacy"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Healthcare Industry",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Typing :: Typed",
+]
+# Core is stdlib-only by design: sqlite3, csv, json, zipfile, urllib, argparse.
+dependencies = []
+
+[project.optional-dependencies]
+web = ["fastapi>=0.115", "uvicorn>=0.30"]
+
+[project.scripts]
+ndcres = "ndcres.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/goobz22/ndc-equivalence-resolver"
+Issues = "https://github.com/goobz22/ndc-equivalence-resolver/issues"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "mypy>=1.13",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ndcres"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "live: tests that hit real network endpoints (skipped unless NDCRES_LIVE=1)",
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]

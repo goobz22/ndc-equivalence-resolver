@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.mypy_cache/
+dist/
+build/
+
+# Local data — never vendored (see README: code only, zero bundled data)
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Web
+node_modules/
+web/.next/
+web/out/
+.vercel/
+
+# OS / editor
+.DS_Store
+Thumbs.db

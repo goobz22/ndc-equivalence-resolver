@@ -1,0 +1,3 @@
+# Fixture files are verbatim byte slices of real upstream files (cp1252 bytes,
+# CRLF line endings, trailing spaces). Git must never normalize them.
+tests/fixtures/** -text
