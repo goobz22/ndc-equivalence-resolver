@@ -39,6 +39,8 @@ _FULL_COPY_TABLES = (
     "rx_rel",
     "rx_ndc",
     "product_derived",
+    "sdud",  # already aggregated to (ndc, year, quarter) at ingest
+    "enforcement",
 )
 
 
