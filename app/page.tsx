@@ -6,17 +6,21 @@ export default function HomePage() {
     <>
       <section className="hero">
         <h1>
-          Your pharmacy says your drug is out. The same drug likely exists
-          under a different code.
+          Your pharmacy says your drug is out. Here is the rest of the
+          picture.
         </h1>
         <p className="lede">
           US pharmacies stock medications by NDC — a code tied to one
           manufacturer&apos;s product. When that exact code is on back order,
-          FDA-rated equivalents from other manufacturers often are not. This
-          tool resolves any NDC into its substitutable alternatives — what a
-          pharmacist can swap on the spot, and what your prescriber would need
-          to write to unlock the rest. Built entirely from public FDA, NLM,
-          and CMS data.
+          FDA-rated equivalents from other manufacturers often are not — and
+          the official shortage list is voluntary and lagging, so real supply
+          strain often never appears on it. For any drug, this tool shows
+          both: the substitutable alternatives (what a pharmacist can swap on
+          the spot, and what a prescriber could authorize), and independent
+          supply-stress evidence drawn from public price, survey, demand, and
+          recall data — whether or not the official list has caught up. Built
+          entirely from public FDA, NLM, and CMS data, with every number
+          traced to its source.
         </p>
         <SearchBox autoFocus />
         <div className="example-chips">
@@ -72,13 +76,16 @@ export default function HomePage() {
         <h2>What this is (and is not)</h2>
         <div className="card">
           <p className="sub">
-            This resolver holds the public equivalence graph — FDA NDC
-            Directory, FDA Orange Book therapeutic-equivalence codes, RxNorm,
-            openFDA shortage records, and NADAC weekly pharmacy acquisition
-            costs — joined the way no retail system exposes. It does NOT know
-            any store&apos;s live inventory, and its supply-stress indicators
-            are inferences from public signals, never availability claims. No
-            account, no tracking, no patient data.
+            This resolver holds the public equivalence and supply graph — the
+            FDA NDC Directory, FDA Orange Book therapeutic-equivalence codes,
+            RxNorm, openFDA shortage records, NADAC weekly pharmacy
+            acquisition costs, Medicaid state drug utilization volumes, and
+            FDA recall enforcement reports — joined the way no retail system
+            exposes. It does NOT know any store&apos;s live inventory, and its
+            supply-stress indicators are inferences from public signals —
+            evidence consistent with strain, never availability claims and
+            never a confirmed shortage. No account, no tracking, no patient
+            data.
           </p>
         </div>
       </section>

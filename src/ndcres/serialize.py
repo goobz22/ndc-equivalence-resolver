@@ -55,7 +55,12 @@ def annotated_dict(annotated: Annotated) -> dict[str, Any]:
 
 
 def class_assessment_dict(assessment: ClassAssessment) -> dict[str, Any]:
-    return dataclasses.asdict(assessment)
+    payload = dataclasses.asdict(assessment)
+    # Serializers emit JSON-native types only: asdict preserves tuple
+    # fields as tuples, which compare unequal to the lists a JSON
+    # round-trip produces (caught by the CLI↔web parity test).
+    payload["lines"] = list(payload["lines"])
+    return payload
 
 
 def resolution_dict(resolution: Resolution) -> dict[str, Any]:
