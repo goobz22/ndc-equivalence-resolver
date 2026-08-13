@@ -343,3 +343,53 @@ class TestRefreshSemantics:
                 "LEFT JOIN source_run r USING (run_id) WHERE r.run_id IS NULL"
             ).fetchone()["n"]
             assert orphan == 0, table
+
+
+class TestNadacLegacyHeader:
+    def test_underscore_vintage_header_accepted(self, tmp_path: Path) -> None:
+        # Yearly NADAC files before 2024 spell the columns with
+        # underscores; the parser accepts BOTH verified spellings and
+        # still refuses anything else.
+        from ndcres.db import connect, start_run
+        from ndcres.ingest import nadac
+
+        legacy = tmp_path / "nadac_legacy.csv"
+        legacy.write_text(
+            "NDC Description,NDC,NADAC_Per_Unit,Effective_Date,Pricing_Unit,"
+            "Pharmacy_Type_Indicator,OTC,Explanation_Code,"
+            "Classification_for_Rate_Setting,"
+            "Corresponding_Generic_Drug_NADAC_Per_Unit,"
+            "Corresponding_Generic_Drug_Effective_Date,As of Date\n"
+            "FENOFIBRATE 54 MG TABLET,68180023109,0.16400,12/23/2020,EA,"
+            "C/I,N,1,G,,,01/06/2021\n",
+            encoding="utf-8",
+        )
+        conn = connect(tmp_path / "t.db")
+        with conn:
+            run_id = start_run(
+                conn, source="nadac", source_url="file://test",
+                fetched_at="2026-08-13T00:00:00Z",
+            )
+            count = nadac.ingest(conn, run_id, (legacy,))
+        assert count == 1
+        row = conn.execute(
+            "SELECT price, effective_date FROM nadac WHERE ndc11='68180023109'"
+        ).fetchone()
+        assert row["effective_date"] == "2020-12-23"
+
+    def test_truly_drifted_header_still_refuses(self, tmp_path: Path) -> None:
+        from ndcres.db import connect, start_run
+        from ndcres.ingest import nadac
+
+        import pytest
+
+        bad = tmp_path / "nadac_bad.csv"
+        bad.write_text("Totally,Different,Columns\n1,2,3\n", encoding="utf-8")
+        conn = connect(tmp_path / "t.db")
+        with conn:
+            run_id = start_run(
+                conn, source="nadac", source_url="file://test",
+                fetched_at="2026-08-13T00:00:00Z",
+            )
+            with pytest.raises(ValueError, match="header drifted"):
+                nadac.ingest(conn, run_id, (bad,))
