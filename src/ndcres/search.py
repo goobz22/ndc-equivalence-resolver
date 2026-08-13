@@ -36,14 +36,13 @@ import sqlite3
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
-from .formfamily import form_family as _  # noqa: F401  (documents the source of families)
 from .ndc import NdcError, parse_ndc, product_ndc_to_ndc9
 from .strength import _fmt
 
 _FETCH_CAP = 500
 
-# Query words that mean a form family (families are the values emitted by
-# formfamily.form_family — keep in sync with that module).
+# Query words that mean a form family. The family values are the ones
+# formfamily.form_family emits — keep this map in sync with that module.
 _FORM_WORDS = {
     "patch": "patch",
     "patches": "patch",
@@ -197,8 +196,11 @@ def _ndc_variants(token: str) -> set[str]:
     digits = token
     variants = {digits}
     if len(digits) == 8:
-        # the 4-4 filed shape pads the labeler: 0378 4642 -> 003784642
-        variants.add("0" + digits[:4] + digits[4:])
+        # A bare 8-digit product NDC could be either filed shape:
+        # 4-4 pads the labeler (0378 4642 -> 003784642), 5-3 pads the
+        # product segment (12345 678 -> 123450678).
+        variants.add("0" + digits)
+        variants.add(digits[:5] + "0" + digits[5:])
     if len(digits) in (10, 11):
         try:
             variants |= set(parse_ndc(digits).candidates)
@@ -286,10 +288,15 @@ def search(
                s.rep_ndc11, s.package_count
         FROM product p JOIN search_doc s USING (ndc9)
         WHERE {" AND ".join(conditions)}
+        ORDER BY s.marketed DESC, s.has_nadac DESC, p.proprietary_name, p.ndc9
         LIMIT {_FETCH_CAP}
         """,
         params,
     ).fetchall()
+    # The ORDER BY makes the capped slice the PLAUSIBLE candidates for a
+    # broad query (marketed, surveyed products first) — without it the cap
+    # would take an arbitrary scan-order slice and the Python ranking
+    # below could never surface what it was never given.
 
     scored = sorted(
         (( -_score(row, name_terms), _display_name(row), row["ndc9"], row) for row in rows),

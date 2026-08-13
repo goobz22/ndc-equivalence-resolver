@@ -373,10 +373,12 @@ def cmd_search(
         status = "marketed" if hit.marketed else "not marketed"
         te_badge = f" TE:{hit.te_code}" if hit.te_code else ""
         strength = f" {hit.strength}" if hit.strength else ""
+        # ASCII-only console output (Windows cp1252 renders anything else
+        # as '?', per the repo-wide rule the other _print helpers follow).
         print(
             f"  {hit.ndc_as_filed:<14} {display_name}{strength}"
-            f" — {hit.generic_name or '?'} · {hit.labeler or '?'}"
-            f" · {hit.package_count} pkg · {status}{te_badge}"
+            f" - {hit.generic_name or '?'} | {hit.labeler or '?'}"
+            f" | {hit.package_count} pkg | {status}{te_badge}"
         )
     print()
     print(_DISCLAIMER)

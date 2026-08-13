@@ -331,6 +331,16 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA foreign_keys = ON")
+    # Pre-release schema shim: the first cut of search_doc carried an FK
+    # to product, which blocks the mirror-replace DELETE on the next
+    # refresh. CREATE IF NOT EXISTS cannot fix an existing table, so drop
+    # the bad shape here; the DDL below recreates it and the next refresh
+    # repopulates (a derived table — nothing is lost).
+    legacy = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='search_doc'"
+    ).fetchone()
+    if legacy and "REFERENCES product" in (legacy["sql"] or ""):
+        conn.execute("DROP TABLE search_doc")
     # Read-heavy workload over a few hundred MB: a generous page cache and
     # memory-mapped reads keep the resolve path off the disk.
     conn.execute("PRAGMA cache_size = -65536")  # 64MB

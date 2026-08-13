@@ -80,10 +80,12 @@ function BrowseResults() {
             {result.te_code ? (
               <span className="badge">TE {result.te_code}</span>
             ) : null}
-            <span className="badge">
-              {result.package_count} package
-              {result.package_count === 1 ? "" : "s"}
-            </span>
+            {result.package_count > 0 ? (
+              <span className="badge">
+                {result.package_count} package
+                {result.package_count === 1 ? "" : "s"}
+              </span>
+            ) : null}
             {!result.marketed ? (
               <span className="badge warn">not marketed</span>
             ) : null}
