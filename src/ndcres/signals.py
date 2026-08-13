@@ -1,7 +1,7 @@
 """Supply-stress signals.
 
 Three independent, dataset-relative components, each with citable
-evidence — combined into a single documented heuristic score in [0, 1].
+evidence - combined into a single documented heuristic score in [0, 1].
 The score is an INFERENCE about supply stress. It is never a statement
 of availability; equivalence facts and supply inference must never be
 conflated (design principle: probabilities, never booleans, anywhere
@@ -11,14 +11,14 @@ Components and fixed weights:
 
     shortage   0.60  an openFDA shortage record with status Current or
                      To Be Discontinued. Absence means "no known
-                     shortage record" — NOT "available" (the shortage
+                     shortage record" - NOT "available" (the shortage
                      dataset is sparse; whole drug families have no
                      records at all).
     dropout    0.25  the NDC has stopped appearing in weekly NADAC
                      surveys. NADAC derives from real pharmacy invoice
                      transactions, so dropout often precedes a shortage
                      bulletin. Measured against the dataset's own
-                     horizon (max as-of date), never the wall clock —
+                     horizon (max as-of date), never the wall clock -
                      deterministic and offline-friendly. Fires at >= 4
                      weeks, scales linearly to full weight at 8.
     drift      0.15  trailing-12-month acquisition-cost change: the
@@ -28,7 +28,7 @@ Components and fixed weights:
                      Note: CMS damps generic rates with a 3-month moving
                      average since 2024-12, so real drift is understated.
 
-Marketing status is a separate axis reported alongside — never folded
+Marketing status is a separate axis reported alongside - never folded
 into the score (discontinuation is not shortage).
 """
 
@@ -150,7 +150,7 @@ def dropout_component(
             evidence=(
                 f"last seen in the NADAC weekly survey {last_seen}; "
                 f"{weeks_gone:.0f} weeks before the dataset horizon "
-                f"{horizon} — transactions appear to have stopped"
+                f"{horizon} - transactions appear to have stopped"
             ),
         )
     return SignalComponent(
@@ -199,7 +199,7 @@ def drift_component(conn: sqlite3.Connection, ndc11: str) -> SignalComponent:
             name="price-drift",
             fired=True,
             contribution=_WEIGHT_DRIFT * scale,
-            evidence=evidence + " — rising cost on a survey-priced product",
+            evidence=evidence + " - rising cost on a survey-priced product",
         )
     return SignalComponent(
         name="price-drift", fired=False, contribution=0.0, evidence=evidence

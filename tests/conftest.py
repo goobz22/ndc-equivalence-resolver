@@ -14,13 +14,19 @@ NDC_V2 = FIXTURES / "ndc_v2"
 
 
 @pytest.fixture(scope="session")
-def loaded_conn(tmp_path_factory: pytest.TempPathFactory) -> Connection:
-    """A database ingested once from the full fixture slice, shared
-    read-only by resolve/explain/signal tests."""
+def loaded_db_path(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Path of a database ingested once from the full fixture slice."""
     db_path = tmp_path_factory.mktemp("db") / "ndcres.db"
     conn = connect(db_path)
     refresh(conn, from_dir=FULL)
-    return conn
+    conn.close()
+    return db_path
+
+
+@pytest.fixture(scope="session")
+def loaded_conn(loaded_db_path: Path) -> Connection:
+    """A shared read-only connection to the fixture database."""
+    return connect(loaded_db_path)
 
 
 @pytest.fixture()

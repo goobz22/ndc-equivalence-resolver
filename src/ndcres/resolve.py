@@ -321,7 +321,18 @@ def assign_tier(seed: Dims, candidate: Dims) -> TierResult:
         else:
             reasons.append("not-in-orange-book")
     if seed.eq_group is not None and candidate.eq_group is not None:
-        reasons.append("different-te-subgroup")
+        # The group key is (ingredient, heading, strength, TE code). When
+        # the heading and full TE code agree and only the strength differs,
+        # the products are the same TE family at another strength —
+        # claiming a subgroup difference there would be a lie the
+        # different-strength reason already covers.
+        heading_or_code_differs = (
+            seed.eq_group[0] != candidate.eq_group[0]
+            or seed.eq_group[1] != candidate.eq_group[1]
+            or seed.eq_group[3] != candidate.eq_group[3]
+        )
+        if heading_or_code_differs:
+            reasons.append("different-te-subgroup")
     if candidate.schedule is not None and seed.schedule is not None:
         if candidate.schedule != seed.schedule:
             reasons.append("different-schedule")
@@ -599,8 +610,17 @@ def _annotate(
 
 def _rank_key(annotated: Annotated) -> tuple[float, int, float, str, str]:
     """stress asc → NADAC recency desc → price asc → name → ndc11 (the
-    deterministic tiebreak)."""
+    deterministic tiebreak).
+
+    Ranking-only nudge: products with NO NADAC presence at all (usually
+    low-volume repackagers) sort behind surveyed products of similar
+    stress — never being surveyed is weaker retail evidence than a mild
+    price trend. This affects ordering only; the reported stress score is
+    untouched.
+    """
     stress = annotated.stress_score if annotated.stress_score is not None else 0.0
+    if annotated.nadac_as_of_last is None:
+        stress += 0.1
     recency = annotated.nadac_as_of_last
     # ISO dates sort numerically once the hyphens are dropped; negate so
     # more-recent survey presence ranks first. Absent NADAC ranks last.

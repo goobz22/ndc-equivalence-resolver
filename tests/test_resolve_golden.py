@@ -271,6 +271,29 @@ class TestProperties:
         )
         assert assign_tier(seed, candidate).tier == "T1"
 
+    def test_same_te_family_other_strength_is_only_different_strength(
+        self,
+    ) -> None:
+        # Live-data regression: Dotti 0.075 vs the 0.05 anchor — same
+        # heading, same AB1 code, different strength. The reason must be
+        # different-strength ALONE; claiming different-te-subgroup there
+        # is false (the TE family is the same).
+        seed = Dims(
+            ndc9="111110001", ndc11="11111000101", ingredient_set="ESTRADIOL",
+            ingredient_count=1, form_family="patch", strength_norm="UG24H:50",
+            eq_group=("ESTRADIOL", "SYSTEM;TRANSDERMAL", "UG24H:50", "AB1"),
+            te_code="AB1", schedule="2/wk", pack_count=8, marketed=True,
+        )
+        candidate = Dims(
+            ndc9="222220001", ndc11="22222000101", ingredient_set="ESTRADIOL",
+            ingredient_count=1, form_family="patch", strength_norm="UG24H:75",
+            eq_group=("ESTRADIOL", "SYSTEM;TRANSDERMAL", "UG24H:75", "AB1"),
+            te_code="AB1", schedule="2/wk", pack_count=8, marketed=True,
+        )
+        result = assign_tier(seed, candidate)
+        assert result.tier == "T3"
+        assert result.reasons == ("different-strength",)
+
     def test_unknown_schedule_blocks_tier_across_groups(self) -> None:
         seed = Dims(
             ndc9="111110001", ndc11="11111000101", ingredient_set="ESTRADIOL",

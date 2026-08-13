@@ -13,22 +13,21 @@ prescriber-authorization language.
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import json
 import sys
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Sequence
 
 from . import __version__
 from .db import connect
 from .explain import REASON_LANGUAGE, TIER_LANGUAGE, Explanation
 from .ndc import NdcError, ndc11_to_hipaa, parse_ndc
 from .resolve import Annotated, Resolution, ResolveError
-
-_DISCLAIMER = (
-    "ndcres surfaces supply-chain equivalence facts from public FDA/NLM/CMS "
-    "data. It is not medical advice; substitution decisions belong to your "
-    "pharmacist and prescriber."
+from .serialize import (
+    DISCLAIMER as _DISCLAIMER,
+    explanation_dict,
+    resolution_dict,
+    signal_dict,
 )
 
 
@@ -134,35 +133,6 @@ def cmd_refresh(
         if source in counts:
             print(f"  {source:<11} {counts[source]:>9,} rows")
     return 0
-
-
-def _annotated_dict(annotated: Annotated) -> dict[str, Any]:
-    dims = annotated.dims
-    return {
-        "ndc11": dims.ndc11,
-        "ndc_as_filed": dims.package_ndc_filed,
-        "name": dims.proprietary_name,
-        "name_suffix": dims.proprietary_suffix,
-        "labeler": dims.labeler_name,
-        "application": dims.appl_display,
-        "te_code": dims.te_code,
-        "ob_heading": dims.ob_heading,
-        "ob_type": dims.ob_type,
-        "strength": dims.strength_norm,
-        "schedule": dims.schedule,
-        "schedule_confidence": dims.schedule_confidence,
-        "schedule_conflict": dims.schedule_conflict,
-        "pack_count": dims.pack_count,
-        "pack_unit": dims.pack_unit,
-        "marketed": dims.marketed,
-        "tier": annotated.result.tier,
-        "reasons": list(annotated.result.reasons),
-        "nadac_per_unit": annotated.nadac_price,
-        "nadac_effective_date": annotated.nadac_effective,
-        "nadac_last_seen": annotated.nadac_as_of_last,
-        "shortage_statuses": list(annotated.shortage_statuses),
-        "stress_score": annotated.stress_score,
-    }
 
 
 def _print_annotated(annotated: Annotated, indent: str = "    ") -> None:
@@ -273,20 +243,7 @@ def cmd_resolve(db_path: Path | None, ndc_text: str, as_json: bool) -> int:
         print(f"error: {error}", file=sys.stderr)
         return 2
     if as_json:
-        payload = {
-            "seed": _annotated_dict(resolution.seed_annotation)
-            if resolution.seed_annotation
-            else None,
-            "seed_status": resolution.seed_status,
-            "notes": list(resolution.notes),
-            "tiers": {
-                tier: [_annotated_dict(a) for a in members]
-                for tier, members in resolution.tiers.items()
-            },
-            "excluded": [_annotated_dict(a) for a in resolution.excluded],
-            "disclaimer": _DISCLAIMER,
-        }
-        print(json.dumps(payload, indent=2))
+        print(json.dumps(resolution_dict(resolution), indent=2))
     else:
         _print_resolution(resolution)
     return 0
@@ -325,17 +282,7 @@ def cmd_explain(db_path: Path | None, ndc_a: str, ndc_b: str, as_json: bool) -> 
         print(f"error: {error}", file=sys.stderr)
         return 2
     if as_json:
-        payload = {
-            "verdict": explanation.verdict.tier,
-            "verdict_language": TIER_LANGUAGE[explanation.verdict.tier],
-            "reasons": [
-                {"code": reason, "language": REASON_LANGUAGE.get(reason, reason)}
-                for reason in explanation.verdict.reasons
-            ],
-            "dimensions": [dataclasses.asdict(line) for line in explanation.lines],
-            "disclaimer": _DISCLAIMER,
-        }
-        print(json.dumps(payload, indent=2))
+        print(json.dumps(explanation_dict(explanation), indent=2))
     else:
         _print_explanation(explanation)
     return 0
@@ -353,23 +300,7 @@ def cmd_signal(db_path: Path | None, ndc_text: str, as_json: bool) -> int:
         return 2
     report = signal_report(conn, ndc11)
     if as_json:
-        print(
-            json.dumps(
-                {
-                    "ndc11": report.ndc11,
-                    "stress_score": report.score,
-                    "survey_horizon": report.survey_horizon,
-                    "components": [dataclasses.asdict(c) for c in report.components],
-                    "note": (
-                        "The score is a documented heuristic over public "
-                        "signals. It infers supply stress; it never states "
-                        "availability."
-                    ),
-                    "disclaimer": _DISCLAIMER,
-                },
-                indent=2,
-            )
-        )
+        print(json.dumps(signal_dict(report), indent=2))
         return 0
     print(f"Supply-stress signals for {ndc11} ({ndc11_to_hipaa(ndc11)})")
     if report.survey_horizon:

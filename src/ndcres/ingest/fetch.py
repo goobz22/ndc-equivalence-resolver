@@ -32,6 +32,25 @@ if TYPE_CHECKING:  # pragma: no cover - import cycle guard for typing only
 
 _USER_AGENT = "ndcres/0.1 (+https://github.com/goobz22/ndc-equivalence-resolver)"
 
+
+def _ssl_context() -> ssl.SSLContext:
+    """Prefer OS-native certificate verification when available.
+
+    Machines behind TLS-inspecting proxies/AV present interception CAs
+    that the OS trusts but OpenSSL's stricter chain rules may reject
+    (e.g. "Basic Constraints of CA cert not marked critical"). The
+    optional `truststore` package (install extra: `ndcres[nativetls]`)
+    delegates verification to the platform verifier, matching what
+    browsers and curl-with-schannel accept. Verification is NEVER
+    disabled either way.
+    """
+    try:
+        import truststore
+
+        return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    except ImportError:
+        return ssl.create_default_context()
+
 NDC_DIRECTORY_URL = "https://www.accessdata.fda.gov/cder/ndctext.zip"
 ORANGE_BOOK_URL = "https://www.fda.gov/media/76860/download?attachment"
 RXNORM_PRESCRIBABLE_URL = (
@@ -49,7 +68,7 @@ def _download(url: str, dest: Path) -> str:
     """Download url → dest, returning the file's sha256."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     request = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
-    context = ssl.create_default_context()
+    context = _ssl_context()
     digest = hashlib.sha256()
     with urllib.request.urlopen(request, context=context) as response:  # noqa: S310
         with dest.open("wb") as handle:
@@ -141,7 +160,7 @@ def discover_nadac_datasets() -> list[dict[str, Any]]:
     request = urllib.request.Request(
         MEDICAID_METASTORE_URL, headers={"User-Agent": _USER_AGENT}
     )
-    context = ssl.create_default_context()
+    context = _ssl_context()
     with urllib.request.urlopen(request, context=context) as response:  # noqa: S310
         items = json.load(response)
 

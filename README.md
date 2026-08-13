@@ -96,7 +96,57 @@ no network at all. Everything lands in a local SQLite database
 $ ndcres resolve 0378-4642-26
 ```
 
-<!-- LIVE-OUTPUT:resolve -->
+Real output against the live datasets (2026-08-12 vintage), trimmed to
+the interesting rows:
+
+```text
+Seed: 0378-4642-26  Estradiol - Mylan Pharmaceuticals Inc.
+      TE AB1 | 2/wk | NADAC $7.98/unit (seen 2026-08-12) | no known shortage record
+
+TIER 1 - direct substitutes (pharmacist-level swap in most states)
+    66758-147-83  Vivelle-Dot - Sandoz Inc
+       TE AB1 | 8-count | 2/wk | NADAC $18.41/unit (eff 2026-07-22, seen 2026-08-12) | no known shortage record
+    65162-993-08  DOTTI - Amneal Pharmaceuticals LLC
+       TE AB1 | 8-count | 2/wk | NADAC $7.98/unit (eff 2026-07-22, seen 2026-08-12) | no known shortage record
+       supply-stress 0.05 (heuristic, not availability)
+         - price-drift: acquisition cost 6.85607 (eff 2025-06-18) -> 7.97659 (eff 2026-07-22): +16.3% over the trailing year - rising cost on a survey-priced product
+    0781-7144-83  Estradiol - Sandoz Inc
+       TE AB1 | 8-count | 2/wk | NADAC $7.98/unit (eff 2026-07-22, seen 2026-08-12) | ...
+    70710-1193-8  Estradiol - Zydus Pharmaceuticals USA Inc.
+       TE AB1 | 8-count | 2/wk | NADAC $7.98/unit (eff 2026-07-22, seen 2026-08-12) | ...
+    72162-2034-2  DOTTI - Bryant Ranch Prepack
+       TE AB1 | 8-count | 2/wk | no NADAC record | no known shortage record
+    69238-1631-7  Estradiol - Amneal Pharmaceuticals NY LLC ...
+    70771-1565-8  Estradiol - Zydus Lifesciences Limited ...
+
+TIER 3 - requires prescriber authorization
+    These need a NEW or AMENDED prescription naming the product - ask the prescriber.
+    ...
+    65162-149-08  LYLLANA - Amneal Pharmaceuticals LLC
+       TE AB3 | 8-count | 2/wk | NADAC $7.98/unit (eff 2026-07-22, seen 2026-08-12) | no known shortage record
+       [different-te-subgroup] The two products carry DIFFERENT therapeutic-equivalence
+       codes, so the FDA has not rated them interchangeable. Orange Book preface:
+       "Drugs coded with a three-character code under a heading are considered
+       therapeutically equivalent only to other drugs coded with the same
+       three-character code under that heading."
+    50419-451-04  Climara - Bayer HealthCare Pharmaceuticals Inc.
+       TE AB2 | 4-count | 1/wk | NADAC $18.27/unit (eff 2026-07-22, seen 2026-08-12) | ...
+       [different-te-subgroup] ...
+       [different-schedule] The application schedules differ (e.g. twice-weekly vs
+       once-weekly) - dosing and monthly quantity change.
+    ...
+
+TIER 4 - different delivery form (informational; clinical decision)
+    24658-702-01  ESTRADIOL - PURACAP LABORATORIES, LLC
+       TE AB | 100-count | NADAC $0.06/unit (eff 2026-07-22, seen 2026-08-12) | ...
+    ... (gels, sprays, oral tablets)
+```
+
+Notice what the live data shows: **the whole AB1 generic class is
+class-priced at $7.98/patch and drifting +16% over the trailing year** —
+the supply-stress signal firing on real data — while Lyllana, listed by
+this project's own brief as a direct substitute, sits in Tier 3 where the
+Orange Book actually puts it.
 
 Tiers, in order:
 
@@ -123,7 +173,45 @@ NADAC survey recency, then price. `--json` emits the whole structure.
 $ ndcres explain 00378-4642-26 65162-149-08
 ```
 
-<!-- LIVE-OUTPUT:explain -->
+(Both the brief's HIPAA spelling `65162-0149-08` and the as-filed
+`65162-149-08` are accepted.) Real output:
+
+```text
+Comparing 0378-4642-26 (Estradiol) with 65162-149-08 (LYLLANA)
+
+  [=] active ingredient(s)
+      A: ESTRADIOL
+      B: ESTRADIOL
+      source: FDA NDC Directory, SUBSTANCENAME
+  [=] delivery form family
+      A: patch
+      B: patch
+      source: curated map over NDC Directory dosage form + route
+  [=] strength
+      A: UG24H:50
+      B: UG24H:50
+      source: NDC Directory strength, canonicalized (matches Orange Book spelling)
+  [x] TE code (Orange Book)
+      A: AB1 under [ESTRADIOL; SYSTEM;TRANSDERMAL] via ANDA201675
+      B: AB3 under [ESTRADIOL; FILM, EXTENDED RELEASE;TRANSDERMAL] via ANDA211396
+      source: Orange Book products.txt via application-number join
+  [=] application schedule
+      A: 2/wk (via rxnorm-scd)
+      B: 2/wk (via rxnorm-scd)
+      source: derived: RxNorm concept name / package wear duration / NADAC description / brand map
+  [=] package size
+      A: 8 x patch
+      B: 8 x pouch
+      source: NDC Directory package description, parsed
+
+VERDICT: REQUIRES PRESCRIBER AUTHORIZATION - same medicine family, but NOT
+an automatic substitute. A prescriber must write a new or amended
+prescription naming this product.
+  [different-te-subgroup] ...
+```
+
+Six dimensions, five equal — and the one that differs is the one nothing
+in the retail chain surfaces.
 
 ### 4. Supply-stress signals for one NDC
 
@@ -131,7 +219,20 @@ $ ndcres explain 00378-4642-26 65162-149-08
 $ ndcres signal 0378-4642-26
 ```
 
-<!-- LIVE-OUTPUT:signal -->
+Real output:
+
+```text
+Supply-stress signals for 00378464226 (00378-4642-26)
+  NADAC survey horizon: 2026-08-12
+  [ quiet] shortage (+0.000)
+           no known shortage record in openFDA (absence is not evidence of availability)
+  [ quiet] survey-dropout (+0.000)
+           present in the NADAC survey through 2026-08-12
+  [FIRING] price-drift (+0.049)
+           acquisition cost 6.85607 (eff 2025-06-18) -> 7.97659 (eff 2026-07-22):
+           +16.3% over the trailing year - rising cost on a survey-priced product
+  score: 0.05 of 1.00 (heuristic, not availability)
+```
 
 Three independent components, each with citable evidence:
 
