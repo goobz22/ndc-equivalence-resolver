@@ -173,32 +173,51 @@ def dropout_component(
     )
 
 
-def drift_component(conn: sqlite3.Connection, ndc11: str) -> SignalComponent:
+def _drift_baseline_latest(
+    conn: sqlite3.Connection, ndc11: str
+) -> tuple[sqlite3.Row, sqlite3.Row] | None:
+    """(baseline, latest) NADAC rows for the trailing-year drift, or None.
+
+    The baseline is the rate in force one year before the latest
+    effective date (newest rate at or before the boundary, falling back
+    to the oldest known rate).
+    """
     rows = conn.execute(
         "SELECT effective_date, price, classification FROM nadac "
         "WHERE ndc11 = ? ORDER BY effective_date",
         (ndc11,),
     ).fetchall()
     if len(rows) < 2:
+        return None
+    latest = rows[-1]
+    window_start = _iso_to_date(latest["effective_date"]) - timedelta(days=365)
+    in_force = [
+        r for r in rows if _iso_to_date(r["effective_date"]) <= window_start
+    ]
+    baseline = in_force[-1] if in_force else rows[0]
+    if baseline["price"] <= 0:
+        return None
+    return baseline, latest
+
+
+def drift_pct(conn: sqlite3.Connection, ndc11: str) -> float | None:
+    pair = _drift_baseline_latest(conn, ndc11)
+    if pair is None:
+        return None
+    baseline, latest = pair
+    return float((latest["price"] - baseline["price"]) / baseline["price"])
+
+
+def drift_component(conn: sqlite3.Connection, ndc11: str) -> SignalComponent:
+    pair = _drift_baseline_latest(conn, ndc11)
+    if pair is None:
         return SignalComponent(
             name="price-drift",
             fired=False,
             contribution=0.0,
             evidence="insufficient NADAC price history for a trend",
         )
-    latest = rows[-1]
-    window_start = _iso_to_date(latest["effective_date"]) - timedelta(days=365)
-    # The price in force at the window boundary: the newest rate at or
-    # before it, falling back to the oldest known rate.
-    in_force = [
-        r for r in rows if _iso_to_date(r["effective_date"]) <= window_start
-    ]
-    baseline = in_force[-1] if in_force else rows[0]
-    if baseline["price"] <= 0:
-        return SignalComponent(
-            name="price-drift", fired=False, contribution=0.0,
-            evidence="baseline price unusable",
-        )
+    baseline, latest = pair
     pct = (latest["price"] - baseline["price"]) / baseline["price"]
     evidence = (
         f"acquisition cost {baseline['price']:.5f} (eff "
@@ -237,4 +256,232 @@ def signal_report(conn: sqlite3.Connection, ndc11: str) -> SignalReport:
         score=round(score, 4),
         components=components,
         survey_horizon=horizon,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Class-level supply assessment — the triangulation view.
+#
+# FDA's shortage list is manufacturer-self-reported and lagging; whole
+# real shortages never appear on it. But a genuine supply constraint
+# leaves fingerprints across INDEPENDENT public datasets at the level of
+# the equivalence class (interchangeable products move together):
+#
+#   - class acquisition cost climbing (NADAC, class-priced for generics)
+#   - class members ceasing to transact (NADAC survey dropout ratio)
+#   - national dispensed volume falling (Medicaid SDUD, year over year —
+#     demand for chronic therapies is stable, so falling dispensed
+#     volume with rising price means patients could not fill)
+#   - recalls hitting the class (openFDA enforcement)
+#
+# Two or more independent fingerprints => "evidence consistent with a
+# supply constraint" — deliberately probabilistic wording. This module
+# never claims availability, in either direction.
+# ---------------------------------------------------------------------------
+
+VERDICT_FDA_LISTED = "fda-listed-shortage"
+VERDICT_CONSTRAINT = "evidence-consistent-with-supply-constraint"
+VERDICT_MIXED = "mixed-signals"
+VERDICT_QUIET = "no-independent-stress-evidence"
+
+VERDICT_LANGUAGE = {
+    VERDICT_FDA_LISTED: (
+        "On FDA's official drug-shortage list — a confirmed shortage."
+    ),
+    VERDICT_CONSTRAINT: (
+        "NOT on FDA's shortage list, but two or more independent public "
+        "signals show the pattern of a supply constraint. FDA's list is "
+        "manufacturer-self-reported and lagging; treat this drug as hard "
+        "to fill and take the full equivalents list to the pharmacy."
+    ),
+    VERDICT_MIXED: (
+        "Not on FDA's shortage list; one independent signal is elevated. "
+        "Worth watching, not conclusive."
+    ),
+    VERDICT_QUIET: (
+        "No independent supply-stress evidence in the public data held "
+        "here. This is NOT a statement of availability."
+    ),
+}
+
+_CLASS_DROPOUT_WEEKS = 8.0
+_CLASS_DROPOUT_RATIO_FIRE = 0.25
+_VOLUME_DECLINE_FIRE = -0.15
+_RECALL_WINDOW_DAYS = 730
+
+
+@dataclass(frozen=True)
+class ClassAssessment:
+    member_count: int
+    surveyed_count: int
+    fda_listed_members: int
+    drift_pct: float | None
+    drift_fired: bool
+    dropout_members: int
+    dropout_ratio: float | None
+    volume_change_pct: float | None
+    volume_quarter: str | None
+    recalls: int
+    verdict: str
+    verdict_language: str
+    lines: tuple[str, ...]
+
+
+def class_supply_assessment(
+    conn: sqlite3.Connection, member_ndc11s: tuple[str, ...]
+) -> ClassAssessment:
+    members = tuple(dict.fromkeys(member_ndc11s))
+    horizon = survey_horizon(conn)
+    lines: list[str] = []
+
+    # FDA list, across the class.
+    fda_listed = 0
+    for ndc11 in members:
+        if shortage_component(conn, ndc11).fired:
+            fda_listed += 1
+    if fda_listed:
+        lines.append(
+            f"{fda_listed} of {len(members)} class members carry an active "
+            "record on FDA's shortage list"
+        )
+    else:
+        lines.append(
+            "FDA's official shortage list: no entry for any class member "
+            "(that list is manufacturer-self-reported and lagging - real "
+            "shortages often never appear on it)"
+        )
+
+    # Class price drift: interchangeable generics are class-priced, so
+    # the strongest member trend describes the class.
+    class_drift: float | None = None
+    drift_fired = False
+    surveyed = 0
+    dropout_members = 0
+    for ndc11 in members:
+        pct = drift_pct(conn, ndc11)
+        if pct is not None:
+            if class_drift is None or pct > class_drift:
+                class_drift = pct
+            drift_fired = drift_fired or pct >= _DRIFT_FIRE_PCT
+        last_seen_row = conn.execute(
+            "SELECT max(as_of_last) AS last_seen FROM nadac WHERE ndc11 = ?",
+            (ndc11,),
+        ).fetchone()
+        last_seen = last_seen_row["last_seen"] if last_seen_row else None
+        if last_seen is not None and horizon is not None:
+            surveyed += 1
+            weeks_gone = (
+                _iso_to_date(horizon) - _iso_to_date(last_seen)
+            ).days / 7.0
+            if weeks_gone >= _CLASS_DROPOUT_WEEKS:
+                dropout_members += 1
+    if class_drift is not None:
+        lines.append(
+            f"class acquisition cost {class_drift:+.1%} over the trailing "
+            "year on the CMS-damped NADAC index (spot increases run higher; "
+            "generics are class-priced, so this is the whole class moving)"
+        )
+    dropout_ratio = dropout_members / surveyed if surveyed else None
+    if surveyed:
+        lines.append(
+            f"{dropout_members} of {surveyed} surveyed class members have "
+            f"stopped appearing in the weekly NADAC pharmacy survey "
+            f"(>= {int(_CLASS_DROPOUT_WEEKS)} weeks)"
+        )
+
+    # Dispensed-volume trend (Medicaid SDUD), class-wide, year over year.
+    volume_change: float | None = None
+    volume_quarter: str | None = None
+    if members:
+        placeholders = ",".join("?" for _ in members)
+        volume_rows = conn.execute(
+            f"SELECT year, quarter, sum(units) AS units FROM sdud "  # noqa: S608
+            f"WHERE ndc11 IN ({placeholders}) "
+            "GROUP BY year, quarter ORDER BY year, quarter",
+            members,
+        ).fetchall()
+        if volume_rows:
+            latest = volume_rows[-1]
+            volume_quarter = f"{latest['year']}Q{latest['quarter']}"
+            prior = next(
+                (
+                    row
+                    for row in volume_rows
+                    if row["year"] == latest["year"] - 1
+                    and row["quarter"] == latest["quarter"]
+                ),
+                None,
+            )
+            if prior is not None and prior["units"]:
+                volume_change = (latest["units"] - prior["units"]) / prior["units"]
+                lines.append(
+                    f"national Medicaid dispensed volume for the class: "
+                    f"{volume_change:+.1%} in {volume_quarter} vs the same "
+                    "quarter a year earlier (falling volume with rising "
+                    "price is the fingerprint of patients unable to fill)"
+                )
+
+    # Recalls against class members, measured against the dataset horizon
+    # (never the wall clock — deterministic and offline-friendly).
+    recalls = 0
+    if members:
+        ndc9s = tuple(dict.fromkeys(ndc11[:9] for ndc11 in members))
+        placeholders = ",".join("?" for _ in ndc9s)
+        reference = horizon
+        if reference is None:
+            latest_recall = conn.execute(
+                "SELECT max(recall_initiation) AS d FROM enforcement"
+            ).fetchone()
+            reference = latest_recall["d"] if latest_recall else None
+        cutoff = (
+            (_iso_to_date(reference) - timedelta(days=_RECALL_WINDOW_DAYS)).isoformat()
+            if reference
+            else "0000-00-00"
+        )
+        recalls = conn.execute(
+            f"SELECT count(DISTINCT record_hash) AS n FROM enforcement "  # noqa: S608
+            f"WHERE ndc9 IN ({placeholders}) AND ("
+            "  status = 'Ongoing' OR recall_initiation >= ?"
+            ")",
+            (*ndc9s, cutoff),
+        ).fetchone()["n"]
+        if recalls:
+            lines.append(
+                f"{recalls} recall record(s) against class members in the "
+                "openFDA enforcement data (trailing two years)"
+            )
+
+    fingerprints = sum(
+        (
+            drift_fired,
+            dropout_ratio is not None
+            and surveyed >= 3
+            and dropout_ratio >= _CLASS_DROPOUT_RATIO_FIRE,
+            volume_change is not None and volume_change <= _VOLUME_DECLINE_FIRE,
+            recalls > 0,
+        )
+    )
+    if fda_listed:
+        verdict = VERDICT_FDA_LISTED
+    elif fingerprints >= 2:
+        verdict = VERDICT_CONSTRAINT
+    elif fingerprints == 1:
+        verdict = VERDICT_MIXED
+    else:
+        verdict = VERDICT_QUIET
+
+    return ClassAssessment(
+        member_count=len(members),
+        surveyed_count=surveyed,
+        fda_listed_members=fda_listed,
+        drift_pct=class_drift,
+        drift_fired=drift_fired,
+        dropout_members=dropout_members,
+        dropout_ratio=dropout_ratio,
+        volume_change_pct=volume_change,
+        volume_quarter=volume_quarter,
+        recalls=recalls,
+        verdict=verdict,
+        verdict_language=VERDICT_LANGUAGE[verdict],
+        lines=tuple(lines),
     )
