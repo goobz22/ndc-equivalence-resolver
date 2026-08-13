@@ -135,11 +135,21 @@ class TestFingerprintReplay:
 
 
 class TestLeadTimeReport:
-    def test_report_over_planted_history(
-        self, loaded_conn: sqlite3.Connection
-    ) -> None:
+    def test_report_over_planted_history(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        # A fresh database: the report's first-posting semantics exclude
+        # any drug whose posting history starts before `since`, so this
+        # test must own its whole history (the shared session fixture
+        # accumulates other tests' planted snapshots).
+        from pathlib import Path
+
+        from ndcres.db import connect
+        from ndcres.ingest import refresh
+
+        fixtures = Path(__file__).parent / "fixtures" / "full"
+        conn = connect(tmp_path / "t.db")
+        refresh(conn, from_dir=fixtures)
         store_snapshot(
-            loaded_conn,
+            conn,
             "20260801000000",
             [
                 LegacyRow(
@@ -158,7 +168,7 @@ class TestLeadTimeReport:
                 ),
             ],
         )
-        report = lead_time_report(loaded_conn, since="2026-01-01")
+        report = lead_time_report(conn, since="2026-01-01")
         assert report["listings_total"] >= 2
         assert report["listings_unmapped"] >= 1  # the elixir maps nowhere
         estradiol_cases = [

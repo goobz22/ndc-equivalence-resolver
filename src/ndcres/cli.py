@@ -550,14 +550,18 @@ def cmd_backtest(
             f"  concordant at posting (>=2 independent axes firing): "
             f"{report['concordant_at_posting']} ({rate:.0%})"
         )
-        print(
-            f"  early (fired before the posting): {report['early']} — "
-            f"median lead {report['lead_days_median']} days "
-            f"(p25 {report['lead_days_p25']}, p75 {report['lead_days_p75']}, "
-            f"max {report['lead_days_max']}; "
-            f"{report['step_days']}-day steps, "
-            f"{report['max_lookback_days']}-day lookback)"
-        )
+        if report["early"]:
+            print(
+                f"  early (fired before the posting): {report['early']} — "
+                f"median lead {report['lead_days_median']} days "
+                f"(p25 {report['lead_days_p25']}, p75 {report['lead_days_p75']}, "
+                f"max {report['lead_days_max']}; "
+                f"{report['right_censored']} right-censored at the "
+                f"{report['max_lookback_days']}-day lookback; "
+                f"{report['step_days']}-day steps)"
+            )
+        else:
+            print("  early (fired before the posting): 0")
     print()
     print(_DISCLAIMER)
     return 0

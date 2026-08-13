@@ -65,10 +65,15 @@ class ListingCase:
 def class_members_for_name(
     conn: sqlite3.Connection, drug_name_norm: str
 ) -> tuple[int, tuple[str, ...]]:
-    """Map a listed drug name to TE-rated classes via ingredient words.
+    """Map a listed drug name to TE-rated classes by ingredient names.
 
-    Conservative: every part of a class's ingredient_set must appear as
-    a word-substring of the normalized name. Returns (class_count,
+    A class matches when every part of its ingredient_set appears as a
+    substring of the normalized name. The error direction is
+    OVER-matching: a combination product's name ("Ethinyl Estradiol and
+    Norethindrone") also matches plain single-ingredient classes, so
+    those classes' members pool into the replay. Per-case class/member
+    counts are reported so over-matched cases are inspectable; the
+    docs/VALIDATION.md limitations name this. Returns (class_count,
     member ndc11s across the matched classes).
     """
     classes = conn.execute(
@@ -209,12 +214,18 @@ def lead_time_report(
     conn: sqlite3.Connection, *, since: str = "2020-01-01"
 ) -> dict[str, Any]:
     """Concordance + lead-time distribution over historical listings."""
+    # HAVING, not WHERE: the aggregate must see the drug's ENTIRE
+    # posting history, so a drug FIRST listed before `since` is excluded
+    # outright rather than having a later RE-listing masquerade as a
+    # first posting (which would credit the signals with "lead" over a
+    # shortage FDA had already posted — review catch).
     listings = conn.execute(
         """
         SELECT drug_name_norm, min(initial_posting) AS first_posted
         FROM fda_list_history
-        WHERE initial_posting IS NOT NULL AND initial_posting >= ?
+        WHERE initial_posting IS NOT NULL
         GROUP BY drug_name_norm
+        HAVING min(initial_posting) >= ?
         ORDER BY first_posted
         """,
         (since,),
@@ -253,6 +264,9 @@ def lead_time_report(
     concordant = [c for c in cases if c.fingerprints_at_posting >= 2]
     early = [c for c in concordant if c.lead_days > 0]
     leads = sorted(c.lead_days for c in early)
+    # Cases still firing at the deepest step are right-censored: their
+    # true lead exceeds the lookback. Counted so the median stays honest.
+    censored = sum(1 for c in early if c.lead_days >= _STEP_DAYS * _MAX_STEPS)
 
     def _percentile(values: list[int], fraction: float) -> int | None:
         if not values:
@@ -271,6 +285,7 @@ def lead_time_report(
         "lead_days_p25": _percentile(leads, 0.25),
         "lead_days_p75": _percentile(leads, 0.75),
         "lead_days_max": leads[-1] if leads else None,
+        "right_censored": censored,
         "step_days": _STEP_DAYS,
         "max_lookback_days": _STEP_DAYS * _MAX_STEPS,
         "cases": [

@@ -9,16 +9,20 @@ because FDA deletes resolved records instead of keeping history).
 
 ## Headline result
 
-For every drug FDA first posted to its shortage list since 2020-01-01:
+For every drug whose FIRST-EVER FDA posting falls on or after
+2020-01-01 (drugs first listed earlier are excluded outright — a
+re-listing must never masquerade as a first posting; review-caught,
+fixed with a HAVING aggregate, and re-measured):
 
 | metric | value |
 |---|---|
-| listings recovered | 1,090 |
-| mapped to TE-rated equivalence classes | 796 (294 unmapped — see limitations) |
-| **concordant at posting** (≥2 independent evidence axes already firing the day FDA first listed) | **261 (33% of mapped)** |
-| of those, firing EARLY (before the posting) | 217 (83% of concordant) |
+| first listings since 2020 | 1,011 |
+| mapped to TE-rated equivalence classes | 734 (277 unmapped — see limitations) |
+| **concordant at posting** (≥2 independent evidence axes already firing the day FDA first listed) | **246 (33.5% of mapped)** |
+| of those, firing EARLY (before the posting) | 207 (84% of concordant) |
 | **median lead time** | **112 days** |
-| p25 / p75 / max lead | 56 / 336 / 364 days (max is CAPPED by the 364-day lookback — the true tail is longer) |
+| p25 / p75 lead | 56 / 336 days |
+| right-censored | 51 cases still firing at the 364-day lookback cap — their true leads are LONGER than measured |
 
 Context from the published literature: FDA's own materials document
 ASHP-before-FDA listing lags of 114 and 129 days for known cases
@@ -61,16 +65,28 @@ under indictment would be circular).
 
 ## Limitations (each deliberate and disclosed)
 
-- **294 unmapped listings**: name-based mapping only reaches TE-rated
+- **277 unmapped listings**: name-based mapping only reaches TE-rated
   classes; many listings are injectables/biologics/unrated products.
   The instrument's scope is retail substitutable classes — exactly
   where a consumer can act on the answer.
+- **Name mapping over-matches combination products**: a class matches
+  when its ingredient terms appear in the listed name, so "Ethinyl
+  Estradiol and Norethindrone" also pools plain-estradiol classes into
+  the replay. Per-case class/member counts are in the JSON output for
+  inspection; the error direction inflates member pools, not dates.
 - **Dropout axis is a proxy in replay**: yearly NADAC files carry
   effective-date fidelity but not the original weekly as-of
   observations, so historical dropout = a ≥8-week stall in a member's
   rate-change cadence. The live pipeline uses true as-of observations.
-- **Lead times are right-censored at 364 days** (the lookback cap) and
-  quantized to 28-day steps.
+- **Publication lag can INFLATE measured leads**: the replay keys on
+  dataset-internal dates (SDUD quarter, recall initiation), but a Q1
+  utilization row is not publicly posted until months later, and a
+  recall's initiation date precedes its public posting. A real-time
+  user of this instrument would have seen some of these signals later
+  than the replay assumes. The price axes (weekly NADAC) carry days of
+  lag, not months.
+- **Lead times are right-censored at 364 days** (the lookback cap; 51
+  cases hit it) and quantized to 28-day steps.
 - **Concordance ≠ causation**: the axes measure market symptoms;
   a price spike without a listing can have other causes. That is why
   every surface says "evidence consistent with," never "confirmed."
