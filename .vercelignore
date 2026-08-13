@@ -1,6 +1,8 @@
 # Never upload local data or environments — the build fetches the
 # serving database itself (scripts/fetch-db.mjs).
 data
+api/ndcres
+api/web.db
 .venv
 .next
 node_modules
