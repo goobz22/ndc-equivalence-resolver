@@ -33,7 +33,7 @@ from typing import Literal
 
 from .ndc import parse_ndc
 from .schedule import ScheduleResult, derive_schedule
-from .signals import signal_report
+from .signals import ClassAssessment, class_supply_assessment, signal_report
 
 EqGroup = tuple[str, str, str, str]
 Tier = Literal["T1", "T2", "T3", "T4", "EXCLUDED"]
@@ -99,6 +99,7 @@ class Resolution:
     tiers: dict[str, list[Annotated]] = field(default_factory=dict)
     excluded: list[Annotated] = field(default_factory=list)
     notes: tuple[str, ...] = ()
+    class_assessment: ClassAssessment | None = None
 
 
 class ResolveError(ValueError):
@@ -512,6 +513,22 @@ def resolve(conn: sqlite3.Connection, text: str) -> Resolution:
         )
 
     seed_annotation = _annotate(conn, seed, TierResult("T1", ())) if seed else None
+
+    # The supply picture is assessed over the LEGAL class: the seed plus
+    # everything a pharmacist could dispense against the same script
+    # (tiers 1 and 2). Interchangeable products move together.
+    class_members = tuple(
+        ndc11
+        for ndc11 in (
+            [seed.ndc11] if seed.ndc11 else []
+        )
+        + [a.dims.ndc11 for a in tiers["T1"] if a.dims.ndc11]
+        + [a.dims.ndc11 for a in tiers["T2"] if a.dims.ndc11]
+    )
+    assessment = (
+        class_supply_assessment(conn, class_members) if class_members else None
+    )
+
     return Resolution(
         seed=seed,
         seed_status=seed_status,
@@ -519,6 +536,7 @@ def resolve(conn: sqlite3.Connection, text: str) -> Resolution:
         tiers=tiers,
         excluded=excluded,
         notes=tuple(notes),
+        class_assessment=assessment,
     )
 
 
