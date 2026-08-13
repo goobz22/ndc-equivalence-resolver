@@ -183,8 +183,8 @@ def _print_annotated(annotated: Annotated, indent: str = "    ") -> None:
         bits.append(f"shortage: {', '.join(annotated.shortage_statuses)}")
     else:
         bits.append("no known shortage record")
-    print(f"{indent}{filed}  {name} — {dims.labeler_name or '?'}")
-    print(f"{indent}   {' · '.join(bits)}")
+    print(f"{indent}{filed}  {name} - {dims.labeler_name or '?'}")
+    print(f"{indent}   {' | '.join(bits)}")
     if annotated.result.reasons:
         for reason in annotated.result.reasons:
             language = REASON_LANGUAGE.get(reason, reason)
@@ -206,7 +206,7 @@ def _print_resolution(resolution: Resolution) -> None:
         seed_name += f" {seed.proprietary_suffix}"
     print(
         f"Seed: {seed.package_ndc_filed or seed.ndc11 or seed.ndc9}  "
-        f"{seed_name} — {seed.labeler_name or '?'}"
+        f"{seed_name} - {seed.labeler_name or '?'}"
     )
     if resolution.seed_annotation is not None:
         seed_annotation = resolution.seed_annotation
@@ -223,7 +223,7 @@ def _print_resolution(resolution: Resolution) -> None:
             if seed_annotation.shortage_statuses
             else "no known shortage record"
         )
-        print(f"      TE {te} · {schedule} · {nadac} · {shortage}")
+        print(f"      TE {te} | {schedule} | {nadac} | {shortage}")
     for note in resolution.notes:
         print(f"      note: {note}")
     print()
@@ -289,7 +289,7 @@ def _print_explanation(explanation: Explanation) -> None:
         f"({right.proprietary_name or '?'})\n"
     )
     for line in explanation.lines:
-        marker = {True: "=", False: "≠", None: "?"}[line.same]
+        marker = {True: "=", False: "x", None: "?"}[line.same]
         print(f"  [{marker}] {line.dimension}")
         print(f"      A: {line.left}")
         print(f"      B: {line.right}")
@@ -329,6 +329,12 @@ def cmd_explain(db_path: Path | None, ndc_a: str, ndc_b: str, as_json: bool) -> 
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    # Windows consoles often run cp1252; upstream data carries characters
+    # outside it (smart quotes in labeler names). Never crash over glyphs.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(errors="replace")
     args = build_parser().parse_args(argv)
     if args.command == "normalize":
         return cmd_normalize(args.ndc)
