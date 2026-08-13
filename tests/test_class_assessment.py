@@ -7,6 +7,7 @@ falling dispensed volume + recalls.
 """
 
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -76,7 +77,7 @@ class TestAssessment:
         assert "class acquisition cost" in joined
         assert "dispensed volume" in joined
 
-    def test_fda_listed_dominates(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_fda_listed_dominates(self, tmp_path: Path) -> None:
         from test_signals import TestShortage
 
         conn = TestShortage._conn_with_synthetic_shortage(tmp_path)

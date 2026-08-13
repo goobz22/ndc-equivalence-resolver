@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -135,13 +136,11 @@ class TestFingerprintReplay:
 
 
 class TestLeadTimeReport:
-    def test_report_over_planted_history(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_report_over_planted_history(self, tmp_path: Path) -> None:
         # A fresh database: the report's first-posting semantics exclude
         # any drug whose posting history starts before `since`, so this
         # test must own its whole history (the shared session fixture
         # accumulates other tests' planted snapshots).
-        from pathlib import Path
-
         from ndcres.db import connect
         from ndcres.ingest import refresh
 
