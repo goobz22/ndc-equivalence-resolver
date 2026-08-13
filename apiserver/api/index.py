@@ -33,28 +33,40 @@ for _db in (_HERE / "web.db", _UPLOAD_ROOT / "web.db", _REPO / "data" / "web.db"
         os.environ.setdefault("NDCRES_DB", str(_db))
         break
 
-try:
-    from ndcres.web.app import app  # noqa: F401
-except Exception:  # pragma: no cover - deploy-diagnostics path
-    _error = traceback.format_exc()
-    _listing = sorted(p.name for p in _UPLOAD_ROOT.iterdir())[:30]
+def _load_app():  # -> ASGI application
+    # The Vercel Python builder statically scans the entry file for a
+    # TOP-LEVEL binding named "app" — a name bound inside try/except is
+    # invisible to it, so the import happens here and the module ends
+    # with a plain top-level assignment.
+    try:
+        from ndcres.web.app import app as _real_app
 
-    async def app(scope, receive, send):  # type: ignore[misc,no-redef]
-        if scope["type"] != "http":
-            return
-        body = json.dumps(
-            {
-                "error": "ndcres failed to load inside the serverless bundle",
-                "traceback": _error,
-                "bundle_dir": _listing,
-            },
-            indent=2,
-        ).encode()
-        await send(
-            {
-                "type": "http.response.start",
-                "status": 500,
-                "headers": [(b"content-type", b"application/json")],
-            }
-        )
-        await send({"type": "http.response.body", "body": body})
+        return _real_app
+    except Exception:  # pragma: no cover - deploy-diagnostics path
+        error = traceback.format_exc()
+        listing = sorted(p.name for p in _UPLOAD_ROOT.iterdir())[:30]
+
+        async def _diagnostic(scope, receive, send):  # type: ignore[no-untyped-def]
+            if scope["type"] != "http":
+                return
+            body = json.dumps(
+                {
+                    "error": "ndcres failed to load inside the serverless bundle",
+                    "traceback": error,
+                    "bundle_dir": listing,
+                },
+                indent=2,
+            ).encode()
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 500,
+                    "headers": [(b"content-type", b"application/json")],
+                }
+            )
+            await send({"type": "http.response.body", "body": body})
+
+        return _diagnostic
+
+
+app = _load_app()
