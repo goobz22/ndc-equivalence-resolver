@@ -165,6 +165,19 @@ def export_web_db(
                     "VALUES ('nadac_horizon', ?)",
                     (horizon,),
                 )
+
+            # Latest sweep only: the serving tier reads the current
+            # market picture (dossier sweep-history line, /api/gaps);
+            # the LONGITUDINAL record lives in ndcres-history.db, never
+            # in the size-gated serving artifact.
+            conn.execute(
+                "INSERT INTO web.sweep_run SELECT * FROM main.sweep_run "
+                "WHERE sweep_id = (SELECT max(sweep_id) FROM main.sweep_run)"
+            )
+            conn.execute(
+                "INSERT INTO web.sweep_class SELECT * FROM main.sweep_class "
+                "WHERE sweep_id = (SELECT max(sweep_id) FROM main.sweep_run)"
+            )
     finally:
         conn.execute("DETACH DATABASE web")
         conn.close()

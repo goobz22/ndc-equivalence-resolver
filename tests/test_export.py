@@ -69,3 +69,37 @@ class TestArtifactReadOnlyContract:
     def test_missing_database_fails_loudly(self, tmp_path: Path) -> None:
         with pytest.raises(FileNotFoundError):
             connect_readonly(tmp_path / "nope.db")
+
+
+class TestSweepInTheExport:
+    def test_export_ships_exactly_the_latest_sweep(
+        self, loaded_db_path: Path, tmp_path: Path
+    ) -> None:
+        import shutil
+
+        from ndcres.db import connect
+        from ndcres.sweep import persist_sweep, run_sweep
+
+        # Work on a copy — the session fixture db stays pristine.
+        db_copy = tmp_path / "full.db"
+        shutil.copy(loaded_db_path, db_copy)
+        loaded_db_path = db_copy
+        source = connect(loaded_db_path)
+        first = persist_sweep(source, run_sweep(source))
+        second = persist_sweep(source, run_sweep(source))
+        assert second > first
+        source.close()
+        dest = tmp_path / "web.db"
+        export_web_db(loaded_db_path, dest)
+        web = connect_readonly(dest)
+        try:
+            runs = web.execute(
+                "SELECT sweep_id FROM sweep_run"
+            ).fetchall()
+            assert [row["sweep_id"] for row in runs] == [second]
+            classes = web.execute(
+                "SELECT count(DISTINCT sweep_id) FROM sweep_class"
+            ).fetchone()[0]
+            assert classes == 1
+        finally:
+            web.close()
