@@ -108,10 +108,24 @@ def parse_legacy_csv(text: str) -> list[LegacyRow]:
     return rows
 
 
-def _get(url: str, *, timeout: float = 120.0) -> bytes:
-    request = urllib.request.Request(url, headers=_REQUEST_HEADERS)
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        return bytes(response.read())
+def _get(url: str, *, timeout: float = 120.0, attempts: int = 4) -> bytes:
+    # The Archive 504s/429s routinely under load — retry with backoff;
+    # only a persistent failure raises.
+    last_error: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            request = urllib.request.Request(url, headers=_REQUEST_HEADERS)
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                return bytes(response.read())
+        except urllib.error.HTTPError as error:
+            if error.code not in (429, 500, 502, 503, 504):
+                raise
+            last_error = error
+        except (urllib.error.URLError, TimeoutError) as error:
+            last_error = error
+        if attempt + 1 < attempts:
+            time.sleep(5 * (2**attempt))
+    raise RuntimeError(f"wayback fetch failed after {attempts} attempts: {url}") from last_error
 
 
 def list_snapshot_timestamps() -> list[str]:
