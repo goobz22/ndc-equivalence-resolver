@@ -289,10 +289,10 @@ def _evidence_sections(dossier: Dossier) -> list[str]:
             f"- Class acquisition cost **{a.drift_pct:+.1%}** over the "
             "trailing year on the CMS-damped NADAC index."
         )
-    for member, series in sorted(dossier.nadac_series.items()):
+    for member_ndc11, series in sorted(dossier.nadac_series.items()):
         first, last = series[0], series[-1]
         lines.append(
-            f"- {member}: ${first['price']:.5f} ({first['effective_date']}) "
+            f"- {member_ndc11}: ${first['price']:.5f} ({first['effective_date']}) "
             f"-> ${last['price']:.5f} ({last['effective_date']}), "
             f"{len(series)} rate changes on record"
         )

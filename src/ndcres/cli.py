@@ -129,6 +129,23 @@ def build_parser() -> argparse.ArgumentParser:
     search_cmd.add_argument("--limit", type=int, default=25)
     search_cmd.add_argument("--json", action="store_true", dest="as_json")
 
+    dossier_cmd = subparsers.add_parser(
+        "dossier",
+        help="the full evidence dossier for one equivalence class "
+        "(public case study; --exhibits for the petition-shaped pack)",
+    )
+    dossier_cmd.add_argument("ndc", help="any member NDC of the class")
+    dossier_cmd.add_argument("--json", action="store_true", dest="as_json")
+    dossier_cmd.add_argument(
+        "--md", type=Path, default=None, help="write the case study here"
+    )
+    dossier_cmd.add_argument(
+        "--exhibits",
+        type=Path,
+        default=None,
+        help="write the petition-shaped exhibit pack here",
+    )
+
     export_cmd = subparsers.add_parser(
         "export", help="produce a trimmed read-only database for web serving"
     )
@@ -452,6 +469,43 @@ def cmd_sweep(
     return 0
 
 
+def cmd_dossier(
+    db_path: Path | None,
+    ndc_text: str,
+    as_json: bool,
+    md_path: Path | None,
+    exhibits_path: Path | None,
+) -> int:
+    from .dossier import (
+        build_dossier,
+        dossier_dict,
+        dossier_exhibits,
+        dossier_markdown,
+    )
+
+    conn = connect(db_path)
+    try:
+        dossier = build_dossier(conn, ndc_text)
+    except (NdcError, ResolveError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
+    if as_json:
+        print(json.dumps(dossier_dict(dossier), indent=2))
+        return 0
+    markdown = dossier_markdown(dossier)
+    if md_path is not None:
+        md_path.write_text(markdown, encoding="utf-8", newline="\n")
+        print(f"wrote {md_path}")
+    if exhibits_path is not None:
+        exhibits_path.write_text(
+            dossier_exhibits(dossier), encoding="utf-8", newline="\n"
+        )
+        print(f"wrote {exhibits_path}")
+    if md_path is None and exhibits_path is None:
+        print(markdown)
+    return 0
+
+
 def cmd_fda_snapshot(db_path: Path | None, history_path: Path | None) -> int:
     from .history import open_history, snapshot_fda_list
 
@@ -536,6 +590,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return cmd_sweep(args.db, args.as_json, args.history)
     if args.command == "fda-snapshot":
         return cmd_fda_snapshot(args.db, args.history)
+    if args.command == "dossier":
+        return cmd_dossier(args.db, args.ndc, args.as_json, args.md, args.exhibits)
     if args.command == "search":
         return cmd_search(args.db, args.query, args.limit, args.as_json)
     if args.command == "export":

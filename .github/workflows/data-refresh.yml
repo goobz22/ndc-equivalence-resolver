@@ -39,9 +39,29 @@ jobs:
       - name: Download the durable history archive (first run tolerated)
         env:
           GH_TOKEN: ${{ github.token }}
+        # A transient failure here must FAIL THE JOB — falling through
+        # would let a fresh empty archive clobber-upload over the real
+        # one (release assets keep no version history). Only a genuinely
+        # missing release/asset may proceed without a download.
         run: |
-          gh release download data --pattern ndcres-history.db --dir data \
-            || echo "no archive yet - will be created"
+          if assets=$(gh release view data --json assets --jq '.assets[].name' 2>&1); then
+            if echo "$assets" | grep -qx 'ndcres-history.db'; then
+              gh release download data --pattern ndcres-history.db --dir data
+            else
+              echo "release exists but no archive asset yet - will create"
+            fi
+          elif echo "$assets" | grep -qi 'not found'; then
+            echo "no data release yet - archive will be created"
+          else
+            echo "transient failure checking the release: $assets" >&2
+            exit 1
+          fi
+          if [ -f data/ndcres-history.db ]; then
+            sqlite3 data/ndcres-history.db 'SELECT count(*) FROM sweep_run' > data/.archive-baseline
+          else
+            echo 0 > data/.archive-baseline
+          fi
+          echo "baseline sweep runs: $(cat data/.archive-baseline)"
       - name: Snapshot the FDA shortage list (FDA keeps no history; we do)
         run: uv run ndcres --db data/ndcres.db fda-snapshot --history data/ndcres-history.db
       - name: Market-wide sweep (appends to the archive)
@@ -68,6 +88,13 @@ jobs:
           gh release view data >/dev/null 2>&1 || \
             gh release create data --title "Data artifact (rolling)" \
               --notes "Weekly-refreshed serving database. Fetched at build time; never committed."
+          baseline=$(cat data/.archive-baseline)
+          runs=$(sqlite3 data/ndcres-history.db 'SELECT count(*) FROM sweep_run')
+          echo "archive sweep runs: $baseline -> $runs"
+          if [ "$runs" -le "$baseline" ]; then
+            echo "archive did not grow past its downloaded baseline - refusing to publish" >&2
+            exit 1
+          fi
           gh release upload data data/web.db --clobber
           gh release upload data data/ndcres-history.db --clobber
       - name: Quarterly dated archive copy (first run of Jan/Apr/Jul/Oct)

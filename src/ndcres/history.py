@@ -72,6 +72,30 @@ def snapshot_fda_list(
         GROUP BY generic_name, company, status
         """
     ).fetchall()
+    # Merge by the NORMALIZED name (the PK's key): two raw spellings that
+    # collapse to one norm become one row explicitly, keeping the widest
+    # date range, instead of INSERT OR IGNORE silently dropping one.
+    merged: dict[tuple[str, str, str], dict[str, str | None]] = {}
+    for row in rows:
+        key = (
+            normalize_drug_name(row["generic_name"]),
+            row["company"],
+            row["status"],
+        )
+        entry = merged.get(key)
+        if entry is None:
+            merged[key] = {
+                "raw": row["generic_name"],
+                "initial_posting": row["initial_posting"],
+                "update_date": row["update_date"],
+            }
+        else:
+            postings = [
+                p for p in (entry["initial_posting"], row["initial_posting"]) if p
+            ]
+            updates = [u for u in (entry["update_date"], row["update_date"]) if u]
+            entry["initial_posting"] = min(postings) if postings else None
+            entry["update_date"] = max(updates) if updates else None
     before = history_conn.execute(
         "SELECT count(*) FROM fda_list_history"
     ).fetchone()[0]
@@ -87,14 +111,14 @@ def snapshot_fda_list(
                 (
                     snapshot_date,
                     snapshot_source,
-                    row["generic_name"],
-                    normalize_drug_name(row["generic_name"]),
-                    row["company"],
-                    row["status"],
-                    row["initial_posting"],
-                    row["update_date"],
+                    entry["raw"],
+                    norm,
+                    company,
+                    status,
+                    entry["initial_posting"],
+                    entry["update_date"],
                 )
-                for row in rows
+                for (norm, company, status), entry in merged.items()
             ],
         )
     after = history_conn.execute(
@@ -158,7 +182,8 @@ def append_sweep_to_history(
             ),
         )
         new_id = cursor.lastrowid
-        assert new_id is not None
+        if new_id is None:  # survives python -O, unlike an assert
+            raise RuntimeError("archive insert produced no row id")
         history_conn.executemany(
             """
             INSERT INTO sweep_class
