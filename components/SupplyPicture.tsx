@@ -1,4 +1,5 @@
-import { ClassAssessment } from "@/lib/api";
+import { ClassAssessment, SourceRefs } from "@/lib/api";
+import { SourceTag } from "@/components/SourceTag";
 
 const VERDICT_STYLE: Record<string, { className: string; label: string }> = {
   "fda-listed-shortage": {
@@ -16,7 +17,13 @@ const VERDICT_STYLE: Record<string, { className: string; label: string }> = {
   },
 };
 
-export function SupplyPicture({ assessment }: { assessment: ClassAssessment }) {
+export function SupplyPicture({
+  assessment,
+  refs,
+}: {
+  assessment: ClassAssessment;
+  refs?: SourceRefs;
+}) {
   const style =
     VERDICT_STYLE[assessment.verdict] ?? VERDICT_STYLE["mixed-signals"];
   return (
@@ -28,6 +35,10 @@ export function SupplyPicture({ assessment }: { assessment: ClassAssessment }) {
           <li key={line}>{line}</li>
         ))}
       </ul>
+      <SourceTag
+        refs={refs}
+        ids={["shortage", "nadac", "sdud", "enforcement"]}
+      />
     </div>
   );
 }

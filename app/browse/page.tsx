@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { api, SearchResult } from "@/lib/api";
+import { api, SearchResult, SourceRefs } from "@/lib/api";
 import { SearchBox } from "@/components/SearchBox";
+import { SourceTag } from "@/components/SourceTag";
 
 function BrowseResults() {
   const searchParams = useSearchParams();
   const query = searchParams.get("q") ?? "";
   const [results, setResults] = useState<SearchResult[] | null>(null);
+  const [refs, setRefs] = useState<SourceRefs | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -19,7 +21,10 @@ function BrowseResults() {
     }
     api
       .search(query)
-      .then((payload) => setResults(payload.results))
+      .then((payload) => {
+        setResults(payload.results);
+        setRefs(payload.sources);
+      })
       .catch((problem: Error) => setError(problem.message));
   }, [query]);
 
@@ -51,6 +56,7 @@ function BrowseResults() {
         forms (&quot;patch&quot;), manufacturers, and NDC fragments, in any
         order.
       </p>
+      <SourceTag refs={refs} ids={["ndc", "rxnorm", "orangebook", "nadac"]} />
       {results.map((result) => (
         <div className="card" key={result.ndc9}>
           <h3>

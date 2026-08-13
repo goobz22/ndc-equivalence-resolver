@@ -278,7 +278,13 @@ def cmd_resolve(db_path: Path | None, ndc_text: str, as_json: bool) -> int:
         print(f"error: {error}", file=sys.stderr)
         return 2
     if as_json:
-        print(json.dumps(resolution_dict(resolution), indent=2))
+        from .provenance import source_refs
+
+        print(
+            json.dumps(
+                resolution_dict(resolution, sources=source_refs(conn)), indent=2
+            )
+        )
     else:
         _print_resolution(resolution)
     return 0
@@ -317,7 +323,13 @@ def cmd_explain(db_path: Path | None, ndc_a: str, ndc_b: str, as_json: bool) -> 
         print(f"error: {error}", file=sys.stderr)
         return 2
     if as_json:
-        print(json.dumps(explanation_dict(explanation), indent=2))
+        from .provenance import source_refs
+
+        print(
+            json.dumps(
+                explanation_dict(explanation, sources=source_refs(conn)), indent=2
+            )
+        )
     else:
         _print_explanation(explanation)
     return 0
@@ -335,7 +347,9 @@ def cmd_signal(db_path: Path | None, ndc_text: str, as_json: bool) -> int:
         return 2
     report = signal_report(conn, ndc11)
     if as_json:
-        print(json.dumps(signal_dict(report), indent=2))
+        from .provenance import source_refs
+
+        print(json.dumps(signal_dict(report, sources=source_refs(conn)), indent=2))
         return 0
     print(f"Supply-stress signals for {ndc11} ({ndc11_to_hipaa(ndc11)})")
     if report.survey_horizon:
@@ -360,7 +374,14 @@ def cmd_search(
     conn = connect(db_path)
     hits = search(conn, query, limit=limit)
     if as_json:
-        print(json.dumps(search_results_dict(query, hits), indent=2))
+        from .provenance import source_refs
+
+        print(
+            json.dumps(
+                search_results_dict(query, hits, sources=source_refs(conn)),
+                indent=2,
+            )
+        )
         return 0
     if not hits:
         print(f'no products match "{query}"')

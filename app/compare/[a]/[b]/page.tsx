@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { api, Explanation } from "@/lib/api";
+import { SourceTag } from "@/components/SourceTag";
 
 const VERDICT_CLASS: Record<string, string> = {
   T1: "t1",
@@ -83,6 +84,10 @@ export default function ComparePage({
             </Link>
           </p>
         ) : null}
+        <SourceTag
+          refs={explanation.sources}
+          ids={["ndc", "orangebook", "rxnorm", "nadac", "shortage"]}
+        />
       </section>
     </>
   );

@@ -128,6 +128,18 @@ export default function NotePage({
             ______________________
           </p>
         </div>
+
+        <div className="field">
+          <b>Data provenance</b>
+          <p style={{ fontSize: "0.8rem" }}>
+            {Object.values(explanation.sources ?? {})
+              .filter((ref) => ref.fetched_at)
+              .map((ref) => `${ref.name} (fetched ${ref.fetched_at?.slice(0, 10)})`)
+              .join(" · ")}
+            {" — "}all U.S. federal public data; verification and methodology:
+            ndc-equivalence-resolver.vercel.app/sources
+          </p>
+        </div>
       </div>
     </>
   );

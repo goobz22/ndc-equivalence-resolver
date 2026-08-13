@@ -80,15 +80,30 @@ export function ProductCard({
           ))}
         </ul>
       ) : null}
-      {seedNdc && entry.ndc11 ? (
+      {seedNdc || entry.application_url ? (
         <div className="row">
-          <Link href={`/compare/${seedNdc}/${entry.ndc11}`}>
-            Why this tier?
-          </Link>
-          {entry.tier !== "T4" && entry.tier !== "EXCLUDED" ? (
+          {seedNdc && entry.ndc11 ? (
+            <Link href={`/compare/${seedNdc}/${entry.ndc11}`}>
+              Why this tier?
+            </Link>
+          ) : null}
+          {seedNdc &&
+          entry.ndc11 &&
+          entry.tier !== "T4" &&
+          entry.tier !== "EXCLUDED" ? (
             <Link href={`/note/${seedNdc}/${entry.ndc11}`}>
               Printable note for your prescriber
             </Link>
+          ) : null}
+          {entry.application_url ? (
+            <a
+              href={entry.application_url}
+              target="_blank"
+              rel="noreferrer"
+              title="The FDA Orange Book page for this application — the primary source of the TE rating shown above"
+            >
+              FDA Orange Book record ({entry.application}) ↗
+            </a>
           ) : null}
         </div>
       ) : null}

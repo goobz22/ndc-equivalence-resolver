@@ -22,6 +22,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from ..db import connect_readonly, default_db_path
 from ..explain import explain as run_explain
 from ..ndc import NdcError
+from ..provenance import source_refs
 from ..resolve import ResolveError, resolve as run_resolve, resolve_input_ndc11
 from ..search import search as run_search
 from ..serialize import (
@@ -67,7 +68,7 @@ def api_resolve(
     ndc: str, conn: sqlite3.Connection = Depends(get_conn)
 ) -> dict[str, Any]:
     try:
-        return resolution_dict(run_resolve(conn, ndc))
+        return resolution_dict(run_resolve(conn, ndc), sources=source_refs(conn))
     except (NdcError, ResolveError) as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
@@ -77,7 +78,9 @@ def api_explain(
     ndc_a: str, ndc_b: str, conn: sqlite3.Connection = Depends(get_conn)
 ) -> dict[str, Any]:
     try:
-        return explanation_dict(run_explain(conn, ndc_a, ndc_b))
+        return explanation_dict(
+            run_explain(conn, ndc_a, ndc_b), sources=source_refs(conn)
+        )
     except (NdcError, ResolveError) as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
@@ -90,7 +93,7 @@ def api_signal(
         ndc11 = resolve_input_ndc11(conn, ndc)
     except (NdcError, ResolveError) as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
-    return signal_dict(signal_report(conn, ndc11))
+    return signal_dict(signal_report(conn, ndc11), sources=source_refs(conn))
 
 
 @app.get("/api/search")
@@ -99,7 +102,9 @@ def api_search(
     limit: int = Query(default=25, ge=1, le=100),
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> dict[str, Any]:
-    return search_results_dict(q, run_search(conn, q, limit=limit))
+    return search_results_dict(
+        q, run_search(conn, q, limit=limit), sources=source_refs(conn)
+    )
 
 
 @app.get("/api/meta")
@@ -121,5 +126,8 @@ def api_meta(conn: sqlite3.Connection = Depends(get_conn)) -> dict[str, Any]:
             }
             for row in rows
         ],
+        # Full identity + latest-run state per source — the /sources page
+        # and per-block SourceTags render from this (SPEC §9).
+        "registry": source_refs(conn),
         "disclaimer": DISCLAIMER,
     }

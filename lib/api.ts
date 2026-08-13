@@ -2,6 +2,18 @@
 // produced by src/ndcres/serialize.py — the single serializer both the
 // CLI and this UI consume.
 
+export interface SourceRef {
+  name: string;
+  publisher: string;
+  url: string;
+  license: string;
+  vintage: string | null;
+  fetched_at: string | null;
+  sha256: string | null;
+}
+
+export type SourceRefs = Record<string, SourceRef>;
+
 export interface AnnotatedEntry {
   ndc11: string | null;
   ndc_as_filed: string | null;
@@ -28,6 +40,7 @@ export interface AnnotatedEntry {
   shortage_statuses: string[];
   stress_score: number | null;
   stress_evidence: string[];
+  application_url: string | null;
 }
 
 export interface ClassAssessment {
@@ -54,6 +67,7 @@ export interface Resolution {
   tiers: Record<"T1" | "T2" | "T3" | "T4", AnnotatedEntry[]>;
   tier_language: Record<string, string>;
   excluded: AnnotatedEntry[];
+  sources: SourceRefs;
   disclaimer: string;
 }
 
@@ -72,6 +86,7 @@ export interface Explanation {
   dimensions: DimensionLine[];
   left: { ndc11: string | null; name: string | null };
   right: { ndc11: string | null; name: string | null };
+  sources: SourceRefs;
   disclaimer: string;
 }
 
@@ -88,6 +103,7 @@ export interface SignalReport {
   survey_horizon: string | null;
   components: SignalComponent[];
   note: string;
+  sources: SourceRefs;
   disclaimer: string;
 }
 
@@ -134,10 +150,13 @@ export const api = {
     ),
   signal: (ndc: string) => get<SignalReport>(`/api/signal/${encodeURIComponent(ndc)}`),
   search: (q: string) =>
-    get<{ query: string; results: SearchResult[] }>(
+    get<{ query: string; results: SearchResult[]; sources: SourceRefs }>(
       `/api/search?q=${encodeURIComponent(q)}`,
     ),
-  meta: () => get<{ sources: MetaSource[]; disclaimer: string }>("/api/meta"),
+  meta: () =>
+    get<{ sources: MetaSource[]; registry: SourceRefs; disclaimer: string }>(
+      "/api/meta",
+    ),
 };
 
 export const TIER_TITLES: Record<string, string> = {

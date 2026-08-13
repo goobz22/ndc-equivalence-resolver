@@ -232,14 +232,32 @@ together across field classes, token order never matters.
 - No FTS5 dependence (serverless SQLite builds vary); the corpus (114k
   products) serves tokenized indexed queries directly.
 
-## 9. Provenance & attribution — lands with Phase 2
+## 9. Provenance & attribution (`src/ndcres/provenance.py`)
 
-Contract summary: `SOURCE_REGISTRY` (single home) merges static source identity
-(publisher, landing URL, license) with live `source_run` rows (vintage, sha256);
-every serialized payload section carries `source: {name, url, deep_url?, vintage,
-fetched_at}`; deep links where upstream schemes are stable (Orange Book
-per-application, RxNav per-RXCUI, per-year CMS dataset pages); SourceTag on every
-UI data block; `/sources` page; site-wide legal footer.
+Operator rule: "wherever we give data, give a source URL on the web back to
+where the data was gotten from."
+
+- **`SOURCE_REGISTRY`** (single home): per source — display name, publisher,
+  landing URL, license posture — for all seven ingest sources AND the derived
+  tables (link, search), so a ref is never silently missing.
+  `source_refs(conn)` merges identity with the latest source_run per source
+  (vintage, fetched_at, sha256); a never-ingested source still appears with
+  null run state — absence is shown, never hidden.
+- **Every payload carries `sources`** (resolution / explanation / signal /
+  search) plus the disclaimer; `/api/meta` carries the full merged `registry`.
+  The dict builders take `sources` as a required keyword so the CLI and web
+  cannot drift (the parity pin covers it).
+- **Deep links** where upstream schemes are stable: `ob_application_url`
+  (accessdata Orange Book results per application — the primary citation for
+  every TE claim, attached to every annotated row as `application_url`) and
+  `rxnav_url` (per-RXCUI). Outbound citation links only — nothing is fetched.
+- **UI**: `SourceTag` renders "Source: {linked names} · data fetched {date}"
+  under the seed section, the SupplyPicture block, browse results, and the
+  compare table; ProductCard links the FDA Orange Book record; the printable
+  prescriber note carries a Data-provenance field (fetch dates + /sources
+  pointer); `/sources` lists every source with publisher, license, vintage,
+  and SHA-256; the site-wide legal footer states the public-domain/open-data
+  status, MIT/as-is posture, probabilistic framing, and no-tracking promise.
 
 ## 10. Market sweep & longitudinal history — lands with Phases 3–4
 
@@ -414,7 +432,11 @@ the reason and owner. The crosswalk test fails on any dangling reference.
 | INV-16.2 | Export size gate refuses oversized artifacts | ⚠️ OPEN — gate logic lives in export.py:183-189 and fires in CI, but no unit test plants an oversized input; owner: Phase 6 (export changes) adds a gate test |
 | INV-18.1 | Explain: every dimension line cites a source; TE dimension shows the group; special-cased data names its correction | tests/test_explain.py::test_every_dimension_line_cites_a_source ; tests/test_explain.py::test_te_dimension_shows_the_group ; tests/test_explain.py::test_te_source_mentions_the_special_case |
 | INV-18.2 | Explain verdicts: Dotti = direct substitute; Lyllana = requires prescriber, TE the only differing dimension | tests/test_explain.py::test_verdict_is_direct_substitute ; tests/test_explain.py::test_verdict_requires_prescriber ; tests/test_explain.py::test_te_dimension_differs_while_everything_else_matches |
-| INV-18.3 | The disclaimer accompanies every serialized payload | ⚠️ OPEN — DISCLAIMER is attached in serialize.py for resolve/search/meta and asserted nowhere; owner: Phase 2 provenance payload-walk test asserts disclaimer + source refs on every payload |
+| INV-9.1 | Every ingest source and every derived table has a registry identity; refs merge live run state (url + fetched_at present after ingest) | tests/test_provenance.py::test_every_ingest_source_has_identity ; tests/test_provenance.py::test_derived_tables_have_identity_too ; tests/test_provenance.py::test_refs_merge_live_run_state |
+| INV-9.2 | Orange Book / RxNav deep links build correctly and refuse garbage | tests/test_provenance.py::test_anda_deep_link ; tests/test_provenance.py::test_nda_deep_link_pads_to_six ; tests/test_provenance.py::test_rxnav_link ; tests/test_provenance.py::test_garbage_and_none_yield_none |
+| INV-9.3 | Every payload (resolution/explanation/signal/search) carries a complete sources map — and the walker itself fails on stripped provenance (planted defect) | tests/test_provenance.py::test_resolution_payload ; tests/test_provenance.py::test_explanation_payload ; tests/test_provenance.py::test_signal_payload ; tests/test_provenance.py::test_search_payload ; tests/test_provenance.py::test_the_walker_actually_fails_on_stripped_provenance |
+| INV-9.4 | Annotated rows deep-link their TE claim to the Orange Book application page | tests/test_provenance.py::test_anchor_row_links_to_its_orange_book_page |
+| INV-18.3 | The disclaimer accompanies every serialized payload | tests/test_provenance.py::test_resolution_payload ; tests/test_provenance.py::test_the_walker_actually_fails_on_stripped_provenance |
 | INV-15.1 | UI pages render API payloads without independent data logic | ⚠️ OPEN by design — no JS test rig; behavior pinned at the API layer (INV-14.x), rendering verified manually + deploy smoke; revisit if UI logic grows |
 
 Change control: renumbering existing INV ids is forbidden (append new ones);

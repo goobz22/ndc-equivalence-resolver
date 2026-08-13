@@ -10,9 +10,15 @@ import dataclasses
 from typing import Any
 
 from .explain import REASON_LANGUAGE, TIER_LANGUAGE, Explanation
+from .provenance import ob_application_url
 from .resolve import Annotated, Resolution
 from .search import SearchHit
 from .signals import ClassAssessment, SignalReport
+
+# The per-source refs map produced by provenance.source_refs(conn).
+# Every payload carries one (SPEC §9) — CLI and web both pass it in, so
+# the parity pin keeps the surfaces identical.
+SourceRefs = dict[str, dict[str, Any]]
 
 DISCLAIMER = (
     "ndcres surfaces supply-chain equivalence facts from public FDA/NLM/CMS "
@@ -52,6 +58,9 @@ def annotated_dict(annotated: Annotated) -> dict[str, Any]:
         "shortage_statuses": list(annotated.shortage_statuses),
         "stress_score": annotated.stress_score,
         "stress_evidence": list(annotated.stress_evidence),
+        # Deep citation link: the Orange Book page for this application —
+        # the primary source of the TE claim shown on the same card.
+        "application_url": ob_application_url(dims.appl_display),
     }
 
 
@@ -75,10 +84,13 @@ def search_hit_dict(hit: SearchHit) -> dict[str, Any]:
     }
 
 
-def search_results_dict(query: str, hits: tuple[SearchHit, ...]) -> dict[str, Any]:
+def search_results_dict(
+    query: str, hits: tuple[SearchHit, ...], *, sources: SourceRefs
+) -> dict[str, Any]:
     return {
         "query": query,
         "results": [search_hit_dict(hit) for hit in hits],
+        "sources": sources,
         "disclaimer": DISCLAIMER,
     }
 
@@ -92,7 +104,9 @@ def class_assessment_dict(assessment: ClassAssessment) -> dict[str, Any]:
     return payload
 
 
-def resolution_dict(resolution: Resolution) -> dict[str, Any]:
+def resolution_dict(
+    resolution: Resolution, *, sources: SourceRefs
+) -> dict[str, Any]:
     return {
         "seed": annotated_dict(resolution.seed_annotation)
         if resolution.seed_annotation
@@ -108,11 +122,14 @@ def resolution_dict(resolution: Resolution) -> dict[str, Any]:
         },
         "tier_language": TIER_LANGUAGE,
         "excluded": [annotated_dict(a) for a in resolution.excluded],
+        "sources": sources,
         "disclaimer": DISCLAIMER,
     }
 
 
-def explanation_dict(explanation: Explanation) -> dict[str, Any]:
+def explanation_dict(
+    explanation: Explanation, *, sources: SourceRefs
+) -> dict[str, Any]:
     return {
         "verdict": explanation.verdict.tier,
         "verdict_language": TIER_LANGUAGE[explanation.verdict.tier],
@@ -123,11 +140,12 @@ def explanation_dict(explanation: Explanation) -> dict[str, Any]:
         "dimensions": [dataclasses.asdict(line) for line in explanation.lines],
         "left": {"ndc11": explanation.left.ndc11, "name": explanation.left.proprietary_name},
         "right": {"ndc11": explanation.right.ndc11, "name": explanation.right.proprietary_name},
+        "sources": sources,
         "disclaimer": DISCLAIMER,
     }
 
 
-def signal_dict(report: SignalReport) -> dict[str, Any]:
+def signal_dict(report: SignalReport, *, sources: SourceRefs) -> dict[str, Any]:
     return {
         "ndc11": report.ndc11,
         "stress_score": report.score,
@@ -137,5 +155,6 @@ def signal_dict(report: SignalReport) -> dict[str, Any]:
             "The score is a documented heuristic over public signals. It "
             "infers supply stress; it never states availability."
         ),
+        "sources": sources,
         "disclaimer": DISCLAIMER,
     }

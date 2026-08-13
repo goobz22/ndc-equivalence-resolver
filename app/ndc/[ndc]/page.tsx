@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react";
 import { api, Resolution, TIER_TITLES, TIER_SUBTITLES } from "@/lib/api";
 import { ProductCard } from "@/components/ProductCard";
+import { SourceTag } from "@/components/SourceTag";
 import { SupplyPicture } from "@/components/SupplyPicture";
 
 export default function ResolvePage({
@@ -32,8 +33,15 @@ export default function ResolvePage({
       <section className="tier-section">
         <h2>You asked about</h2>
         {seed ? <ProductCard entry={seed} isSeed /> : null}
+        <SourceTag
+          refs={resolution.sources}
+          ids={["ndc", "orangebook", "rxnorm"]}
+        />
         {resolution.class_assessment ? (
-          <SupplyPicture assessment={resolution.class_assessment} />
+          <SupplyPicture
+            assessment={resolution.class_assessment}
+            refs={resolution.sources}
+          />
         ) : null}
         {resolution.notes.map((note) => (
           <div key={note} className="card">

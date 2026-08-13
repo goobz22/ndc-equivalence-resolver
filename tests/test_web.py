@@ -39,11 +39,15 @@ class TestResolveEndpoint:
     def test_web_json_matches_cli_json(
         self, client: TestClient, loaded_conn  # type: ignore[no-untyped-def]
     ) -> None:
+        from ndcres.provenance import source_refs
         from ndcres.resolve import resolve
         from ndcres.serialize import resolution_dict
 
         via_web = client.get("/api/resolve/0378-4642-26").json()
-        via_cli = resolution_dict(resolve(loaded_conn, "0378-4642-26"))
+        via_cli = resolution_dict(
+            resolve(loaded_conn, "0378-4642-26"),
+            sources=source_refs(loaded_conn),
+        )
         assert via_web == via_cli  # one serializer, zero drift
 
 

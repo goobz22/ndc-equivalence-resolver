@@ -130,9 +130,12 @@ class TestAssessment:
     def test_web_payload_carries_the_assessment(
         self, loaded_conn: sqlite3.Connection
     ) -> None:
+        from ndcres.provenance import source_refs
         from ndcres.serialize import resolution_dict
 
-        payload = resolution_dict(resolve(loaded_conn, "0378-4642-26"))
+        payload = resolution_dict(
+            resolve(loaded_conn, "0378-4642-26"), sources=source_refs(loaded_conn)
+        )
         assessment = payload["class_assessment"]
         assert assessment is not None
         assert assessment["verdict"] == VERDICT_CONSTRAINT
