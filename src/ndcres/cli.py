@@ -166,7 +166,7 @@ def _print_annotated(annotated: Annotated, indent: str = "    ") -> None:
     if annotated.shortage_statuses:
         bits.append(f"shortage: {', '.join(annotated.shortage_statuses)}")
     else:
-        bits.append("no known shortage record")
+        bits.append("not on FDA shortage list")
     print(f"{indent}{filed}  {name} - {dims.labeler_name or '?'}")
     print(f"{indent}   {' | '.join(bits)}")
     if annotated.stress_score:
@@ -212,9 +212,16 @@ def _print_resolution(resolution: Resolution) -> None:
         shortage = (
             f"shortage: {', '.join(seed_annotation.shortage_statuses)}"
             if seed_annotation.shortage_statuses
-            else "no known shortage record"
+            else "not on FDA shortage list"
         )
         print(f"      TE {te} | {schedule} | {nadac} | {shortage}")
+        if seed_annotation.stress_score:
+            print(
+                f"      SUPPLY-STRESS {seed_annotation.stress_score:.2f} "
+                "(heuristic, not availability)"
+            )
+            for evidence in seed_annotation.stress_evidence:
+                print(f"        - {evidence}")
     for note in resolution.notes:
         print(f"      note: {note}")
     print()
