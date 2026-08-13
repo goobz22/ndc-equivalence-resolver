@@ -60,7 +60,17 @@ def ingest(conn: sqlite3.Connection, run_id: int, csv_paths: Sequence[Path]) -> 
         with path.open(encoding="utf-8-sig", newline="") as handle:
             reader = csv.reader(handle)
             header = next(reader, None)
-            if header != _EXPECTED_HEADER:
+            # CMS renamed the columns between vintages: yearly files
+            # before 2024 use underscores (NADAC_Per_Unit), later ones
+            # spaces — same columns, same order (verified against the
+            # 2018-2026 datasets). Both spellings are ACCEPTED
+            # explicitly; anything else still refuses.
+            normalized = (
+                [column.replace("_", " ") for column in header]
+                if header is not None
+                else None
+            )
+            if normalized != _EXPECTED_HEADER:
                 raise ValueError(
                     f"{path.name}: header drifted from the verified NADAC layout; "
                     "refusing to guess column positions"
