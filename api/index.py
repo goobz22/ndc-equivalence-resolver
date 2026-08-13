@@ -18,8 +18,15 @@ import traceback
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
+_ROOT = _HERE.parent
+# Two possible bundle layouts, depending on how the platform packaged us:
+# self-contained api/ (prepare-api.mjs) or includeFiles-relative paths.
 sys.path.insert(0, str(_HERE))
-os.environ.setdefault("NDCRES_DB", str(_HERE / "web.db"))
+sys.path.insert(0, str(_ROOT / "src"))
+_db = _HERE / "web.db"
+if not _db.exists():
+    _db = _ROOT / "data" / "web.db"
+os.environ.setdefault("NDCRES_DB", str(_db))
 
 try:
     from ndcres.web.app import app  # noqa: F401

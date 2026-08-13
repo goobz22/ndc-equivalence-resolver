@@ -1,0 +1,10 @@
+# Never upload local data or environments — the build fetches the
+# serving database itself (scripts/fetch-db.mjs).
+data
+.venv
+.next
+node_modules
+tests
+.pytest_cache
+.mypy_cache
+uv.lock
