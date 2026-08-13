@@ -323,7 +323,8 @@ def _evidence_sections(dossier: Dossier) -> list[str]:
         for row in dossier.recall_lines[:10]:
             lines.append(
                 f"- {row['recall_initiation']}: {row['classification']} "
-                f"({row['status']}) — {(row['reason'] or '')[:140]}"
+                f"({row['status']}), product {row['ndc9']} — "
+                f"{(row['reason'] or '')[:140]}"
             )
     else:
         lines.append("- No recall records against class members.")

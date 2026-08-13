@@ -38,10 +38,17 @@ export default function ResolvePage({
           ids={["ndc", "orangebook", "rxnorm"]}
         />
         {resolution.class_assessment ? (
-          <SupplyPicture
-            assessment={resolution.class_assessment}
-            refs={resolution.sources}
-          />
+          <>
+            <SupplyPicture
+              assessment={resolution.class_assessment}
+              refs={resolution.sources}
+            />
+            <p style={{ marginTop: "0.5rem" }}>
+              <a href={`/dossier/${seedNdc}`}>
+                Full evidence dossier for this class →
+              </a>
+            </p>
+          </>
         ) : null}
         {resolution.notes.map((note) => (
           <div key={note} className="card">

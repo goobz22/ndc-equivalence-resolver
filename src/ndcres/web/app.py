@@ -107,6 +107,18 @@ def api_search(
     )
 
 
+@app.get("/api/dossier/{ndc}")
+def api_dossier(
+    ndc: str, conn: sqlite3.Connection = Depends(get_conn)
+) -> dict[str, Any]:
+    from ..dossier import build_dossier, dossier_dict
+
+    try:
+        return dossier_dict(build_dossier(conn, ndc))
+    except (NdcError, ResolveError) as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
 @app.get("/api/meta")
 def api_meta(conn: sqlite3.Connection = Depends(get_conn)) -> dict[str, Any]:
     rows = conn.execute(

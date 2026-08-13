@@ -312,14 +312,31 @@ accumulates that record:
 - `snapshot_source` values: `openfda-weekly` (forward) · `wayback-cfm`
   (Phase 7 historical backfill).
 
-## 11. Evidence dossier — lands with Phase 5
+## 11. Evidence dossier (`src/ndcres/dossier.py`, Phase 5 — landed)
 
-Contract summary: one `Dossier` dataset, two renderers. The PUBLIC case study is
-**100% ingested data** (every section vintage-stamped; URL-allowlist pinned by
-test; "Reproduce this" commands). The petition-shaped exhibit pack adds a
-clearly-separated external-references appendix (labeled "externally reported —
-not pipeline data") and a 21 CFR 10.30 structure; filing is the operator's
-decision, never automated.
+One `Dossier` dataset (class members, assessment, live FDA rows, full NADAC
+series per member, SDUD quarterly trend, recalls, this class's sweep-verdict
+history, provenance refs), two renderers:
+
+- **`dossier_markdown` — the PUBLIC case study.** Operator decision #4
+  enforced mechanically: every URL in the rendered markdown must be an
+  ingested source's own registry page or this repository (allowlist test);
+  every evidence section carries its source vintage stamp; ends with the
+  "Reproduce this" commands. The demand narrative is carried by ingested
+  numbers, never a news cite. Absence of an FDA record renders the
+  lagging-list language, never availability.
+- **`dossier_exhibits` — the petition-shaped pack** (21 CFR 10.30 structure:
+  requested action, statement of grounds, evidence sections from ingested
+  data, the 10.30(b) certification placeholder). External references
+  (`EXTERNAL_REFERENCES` constants with URL + access date) appear ONLY after
+  the "NOT pipeline data" separation banner — pinned by test. The header
+  states filing is the operator's decision and a lawyer should read it first.
+- Surfaces: `ndcres dossier <ndc> [--json] [--md PATH] [--exhibits PATH]`,
+  `GET /api/dossier/{ndc}`, `/dossier/[ndc]` print-styled page (which states
+  its web.db data limits: full NADAC series is CLI-only). Pilot artifacts for
+  the estradiol class live under `docs/dossiers/`.
+- Language discipline pinned: "shortage confirmed" never appears;
+  "evidence consistent with" and "not medical advice" always do.
 
 ## 12. Gap report — lands with Phase 6
 
@@ -474,6 +491,11 @@ the reason and owner. The crosswalk test fails on any dangling reference.
 | INV-10.6 | Sweep history is append-only, survives refresh wipes, and round-trips the assessment | tests/test_sweep.py::test_append_only_two_runs ; tests/test_sweep.py::test_history_survives_a_refresh ; tests/test_sweep.py::test_persisted_rows_round_trip_the_assessment |
 | INV-10.7 | FDA-list snapshots record the current list dataset-relatively, dedupe same-date re-runs, and refuse when nothing was ingested | tests/test_history.py::test_snapshot_records_current_list ; tests/test_history.py::test_same_snapshot_date_dedupes ; tests/test_history.py::test_snapshot_date_is_dataset_relative ; tests/test_history.py::test_no_shortage_ingest_fails_loudly ; tests/test_history.py::test_snapshot_into_the_main_db_itself_works |
 | INV-10.8 | The archive assigns fresh sweep ids (colliding runner-local ids can't overwrite), refuses missing sweeps, and refuses corrupt archives at open | tests/test_history.py::test_appends_assign_fresh_ids ; tests/test_history.py::test_missing_sweep_refuses ; tests/test_history.py::test_corrupt_archive_refuses_at_open |
+| INV-11.1 | The public case study contains ONLY ingested-source URLs (allowlist over the rendered markdown) | tests/test_dossier.py::test_public_markdown_is_ingested_data_only |
+| INV-11.2 | Every dossier evidence section carries its source vintage stamp | tests/test_dossier.py::test_every_section_carries_a_vintage |
+| INV-11.3 | Dossier language discipline: never "shortage confirmed"; absence renders lagging-list wording; reproduction commands present; deterministic output | tests/test_dossier.py::test_language_discipline ; tests/test_dossier.py::test_absence_reads_lagging_never_available ; tests/test_dossier.py::test_deterministic |
+| INV-11.4 | The exhibit pack keeps external references strictly AFTER the "NOT pipeline data" banner, with access dates, lawyer note, and 10.30 structure | tests/test_dossier.py::test_structure_and_separation ; tests/test_dossier.py::test_external_refs_carry_access_dates |
+| INV-11.5 | Dossiers build for TE-rated classes, refuse unrated seeds helpfully, and the payload carries provenance + disclaimer | tests/test_dossier.py::test_builds_for_the_anchor ; tests/test_dossier.py::test_unrated_seed_fails_helpfully ; tests/test_dossier.py::test_dict_carries_provenance_and_disclaimer |
 | INV-14.1 | Web and CLI serve identical JSON (one serializer, JSON-native types, zero drift) | tests/test_web.py::test_web_json_matches_cli_json |
 | INV-14.2 | /api/resolve returns the corrected tiers; unknown NDC → 404 with detail | tests/test_web.py::test_anchor_resolves_with_corrected_tiers ; tests/test_web.py::test_unknown_ndc_is_404_with_detail |
 | INV-14.3 | /api/explain carries the Lyllana prescriber-authorization verdict; /api/signal carries components; /api/meta reports vintages | tests/test_web.py::test_lyllana_verdict ; tests/test_web.py::test_signal_components ; tests/test_web.py::test_vintages_reported |
