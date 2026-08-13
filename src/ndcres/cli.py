@@ -92,6 +92,14 @@ def build_parser() -> argparse.ArgumentParser:
     signal_cmd.add_argument("ndc")
     signal_cmd.add_argument("--json", action="store_true", dest="as_json")
 
+    export_cmd = subparsers.add_parser(
+        "export", help="produce a trimmed read-only database for web serving"
+    )
+    export_cmd.add_argument(
+        "--web", action="store_true", required=True, help="web-serving export"
+    )
+    export_cmd.add_argument("--out", type=Path, required=True)
+
     return parser
 
 
@@ -333,6 +341,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         return cmd_explain(args.db, args.ndc_a, args.ndc_b, args.as_json)
     if args.command == "signal":
         return cmd_signal(args.db, args.ndc, args.as_json)
+    if args.command == "export":
+        from .db import default_db_path
+        from .export import export_web_db
+
+        source = args.db if args.db is not None else default_db_path()
+        try:
+            size = export_web_db(source, args.out)
+        except RuntimeError as error:
+            print(f"export failed: {error}", file=sys.stderr)
+            return 1
+        print(f"wrote {args.out} ({size / 1e6:.1f}MB)")
+        return 0
     raise AssertionError("unreachable: argparse enforces a known command")
 
 
