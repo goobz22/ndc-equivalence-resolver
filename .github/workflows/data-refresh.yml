@@ -1,10 +1,12 @@
 # The weekly data pipeline:
-# refresh → export → publish the serving database → trigger deploy.
+# refresh → export → publish the serving database → redeploy the API.
 #
-# Publishes data/web.db to the rolling 'data' release tag, which the
-# Vercel build fetches (scripts/fetch-db.mjs). If a VERCEL_DEPLOY_HOOK
-# secret is configured, a deploy is triggered afterward so the site
-# rebuilds with the fresh artifact.
+# Publishes data/web.db to the rolling 'data' release tag (the artifact
+# anyone can serve from), then redeploys the ndcres-api Vercel project —
+# the database ships INSIDE that function bundle, so a redeploy is what
+# picks up fresh data. The UI project bundles no data (it proxies /api/*
+# to ndcres-api at request time) and does not need rebuilding here; the
+# optional VERCEL_DEPLOY_HOOK remains for operators who want one anyway.
 #
 # workflow_dispatch stays available for manual runs; the schedule is
 # Wednesday 14:00 UTC — after CMS posts the weekly NADAC file.
@@ -52,6 +54,16 @@ jobs:
             gh release create data --title "Data artifact (rolling)" \
               --notes "Weekly-refreshed serving database. Fetched at build time; never committed."
           gh release upload data data/web.db --clobber
-      - name: Trigger Vercel deploy
+      - name: Redeploy the API with the fresh database
+        if: ${{ env.VERCEL_TOKEN != '' }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: team_dCPoXF5E9H4gY3LCVhlXHm4X
+          VERCEL_PROJECT_ID: prj_rD2dW3XpbY8KIHxfSygB778Nxc9x
+        working-directory: apiserver
+        run: |
+          node sync-assets.mjs
+          npx vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN"
+      - name: Trigger Vercel deploy hook (optional, UI)
         if: ${{ vars.VERCEL_DEPLOY_HOOK != '' }}
         run: curl -fsS -X POST "${{ vars.VERCEL_DEPLOY_HOOK }}" -o /dev/null

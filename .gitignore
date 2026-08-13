@@ -14,9 +14,6 @@ data/
 *.db-wal
 *.db-shm
 
-# Build-time copies made by scripts/prepare-api.mjs (exist only in builds)
-api/ndcres/
-
 # Deploy-time copies made by apiserver/sync-assets.mjs (refreshed per deploy)
 apiserver/ndcres/
 
