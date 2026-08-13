@@ -101,6 +101,24 @@ def build_parser() -> argparse.ArgumentParser:
         "(the market-wide supply picture)",
     )
     sweep_cmd.add_argument("--json", action="store_true", dest="as_json")
+    sweep_cmd.add_argument(
+        "--history",
+        type=Path,
+        default=None,
+        help="also append this sweep to the durable archive database",
+    )
+
+    snapshot_cmd = subparsers.add_parser(
+        "fda-snapshot",
+        help="record what the FDA shortage list says right now into the "
+        "append-only history (FDA keeps no history; we do)",
+    )
+    snapshot_cmd.add_argument(
+        "--history",
+        type=Path,
+        default=None,
+        help="also record into the durable archive database",
+    )
 
     search_cmd = subparsers.add_parser(
         "search", help="find products by name, strength, form, or NDC fragment"
@@ -371,7 +389,9 @@ def cmd_signal(db_path: Path | None, ndc_text: str, as_json: bool) -> int:
     return 0
 
 
-def cmd_sweep(db_path: Path | None, as_json: bool) -> int:
+def cmd_sweep(
+    db_path: Path | None, as_json: bool, history_path: Path | None = None
+) -> int:
     from .provenance import source_refs
     from .serialize import sweep_summary_dict
     from .signals import VERDICT_CONSTRAINT
@@ -380,6 +400,18 @@ def cmd_sweep(db_path: Path | None, as_json: bool) -> int:
     conn = connect(db_path)
     result = run_sweep(conn)
     sweep_id = persist_sweep(conn, result)
+    if history_path is not None:
+        from .history import append_sweep_to_history, open_history
+
+        history_conn = open_history(history_path)
+        try:
+            archive_id = append_sweep_to_history(conn, history_conn, sweep_id)
+        finally:
+            history_conn.close()
+        print(
+            f"archived as run #{archive_id} in {history_path}",
+            file=sys.stderr,
+        )
     if as_json:
         payload = sweep_summary_dict(result, sources=source_refs(conn))
         payload["sweep_id"] = sweep_id
@@ -417,6 +449,26 @@ def cmd_sweep(db_path: Path | None, as_json: bool) -> int:
             )
     print()
     print(_DISCLAIMER)
+    return 0
+
+
+def cmd_fda_snapshot(db_path: Path | None, history_path: Path | None) -> int:
+    from .history import open_history, snapshot_fda_list
+
+    conn = connect(db_path)
+    try:
+        new_rows = snapshot_fda_list(conn, conn)
+    except RuntimeError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
+    print(f"local db: {new_rows} new fda_list_history row(s)")
+    if history_path is not None:
+        history_conn = open_history(history_path)
+        try:
+            archived = snapshot_fda_list(conn, history_conn)
+        finally:
+            history_conn.close()
+        print(f"archive {history_path}: {archived} new row(s)")
     return 0
 
 
@@ -481,7 +533,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "signal":
         return cmd_signal(args.db, args.ndc, args.as_json)
     if args.command == "sweep":
-        return cmd_sweep(args.db, args.as_json)
+        return cmd_sweep(args.db, args.as_json, args.history)
+    if args.command == "fda-snapshot":
+        return cmd_fda_snapshot(args.db, args.history)
     if args.command == "search":
         return cmd_search(args.db, args.query, args.limit, args.as_json)
     if args.command == "export":

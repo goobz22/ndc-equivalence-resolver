@@ -285,11 +285,32 @@ where the data was gotten from."
   planted case): fda-listed ⇔ any active record; constraint ⇔ ≥2 fingerprints;
   mixed ⇔ 1; quiet ⇔ 0.
 
-### 10.2 Longitudinal history — lands with Phase 4
+### 10.2 Longitudinal history (`src/ndcres/history.py`, Phase 4 — landed)
 
-Weekly pipeline appends sweeps + FDA-list snapshots (healthdata.gov fnt4-gy9k)
-to a durable `ndcres-history.db` release asset with integrity guards — the
-record the FDA list doesn't keep.
+FDA deletes resolved shortage records instead of keeping history (HHS/ASPE had
+to reconstruct the list's past from Wayback snapshots). The forward archive
+accumulates that record:
+
+- **`fda_list_history`**: weekly snapshots of what the FDA list said, derived
+  from the openFDA bulk ALREADY ingested (no second fetch, no second parser to
+  drift); snapshot date = the shortage source_run's fetch date
+  (dataset-relative); the PK dedupes same-date re-runs.
+  (Note: healthdata.gov's fnt4-gy9k entry was investigated and is only an
+  href pointer to FDA's page, not a mirrorable file — deriving from our own
+  vintage-stamped ingest is both simpler and honest.)
+- **The durable archive `ndcres-history.db`**: the weekly runner starts from
+  an empty database, so sweep verdicts and list snapshots are exactly the data
+  no upstream source will replay. The pipeline downloads the archive from the
+  rolling release, appends (`append_sweep_to_history` assigns fresh archive
+  ids — runner-local ids all start at 1 and would collide), and re-uploads;
+  quarterly dated copies (`ndcres-history-YYYYQn.db`) guard against asset
+  deletion. Integrity guards throughout: `open_history` runs
+  `PRAGMA integrity_check` before anything appends; a regressive append
+  raises — the job fails rather than clobber-uploading a damaged archive.
+- CLI: `ndcres fda-snapshot [--history PATH]` (records locally, and into the
+  archive when given) and `ndcres sweep --history PATH`.
+- `snapshot_source` values: `openfda-weekly` (forward) · `wayback-cfm`
+  (Phase 7 historical backfill).
 
 ## 11. Evidence dossier — lands with Phase 5
 
@@ -451,6 +472,8 @@ the reason and owner. The crosswalk test fails on any dangling reference.
 | INV-10.4 | An fda-listed class still reports its independent fingerprint count (verdict short-circuit never zeroes it) | tests/test_sweep.py::test_fda_listed_class_still_reports_fingerprints |
 | INV-10.5 | No swept member is a sample package or a discontinued-excluded product; enumeration is deterministic with the representative among the members | tests/test_sweep.py::test_no_member_is_sample_or_discontinued_excluded ; tests/test_sweep.py::test_enumeration_is_deterministic |
 | INV-10.6 | Sweep history is append-only, survives refresh wipes, and round-trips the assessment | tests/test_sweep.py::test_append_only_two_runs ; tests/test_sweep.py::test_history_survives_a_refresh ; tests/test_sweep.py::test_persisted_rows_round_trip_the_assessment |
+| INV-10.7 | FDA-list snapshots record the current list dataset-relatively, dedupe same-date re-runs, and refuse when nothing was ingested | tests/test_history.py::test_snapshot_records_current_list ; tests/test_history.py::test_same_snapshot_date_dedupes ; tests/test_history.py::test_snapshot_date_is_dataset_relative ; tests/test_history.py::test_no_shortage_ingest_fails_loudly ; tests/test_history.py::test_snapshot_into_the_main_db_itself_works |
+| INV-10.8 | The archive assigns fresh sweep ids (colliding runner-local ids can't overwrite), refuses missing sweeps, and refuses corrupt archives at open | tests/test_history.py::test_appends_assign_fresh_ids ; tests/test_history.py::test_missing_sweep_refuses ; tests/test_history.py::test_corrupt_archive_refuses_at_open |
 | INV-14.1 | Web and CLI serve identical JSON (one serializer, JSON-native types, zero drift) | tests/test_web.py::test_web_json_matches_cli_json |
 | INV-14.2 | /api/resolve returns the corrected tiers; unknown NDC → 404 with detail | tests/test_web.py::test_anchor_resolves_with_corrected_tiers ; tests/test_web.py::test_unknown_ndc_is_404_with_detail |
 | INV-14.3 | /api/explain carries the Lyllana prescriber-authorization verdict; /api/signal carries components; /api/meta reports vintages | tests/test_web.py::test_lyllana_verdict ; tests/test_web.py::test_signal_components ; tests/test_web.py::test_vintages_reported |

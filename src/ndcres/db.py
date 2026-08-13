@@ -238,6 +238,25 @@ CREATE TABLE IF NOT EXISTS product_derived (
 -- name, TE code, marketed flag, NADAC presence, representative package.
 -- Rebuilt after every refresh (a derived mirror, like product_ob_link);
 -- ships in the web export so /api/search serves from it.
+-- Weekly snapshots of the FDA shortage list (SPEC §10.2): FDA deletes
+-- resolved records instead of keeping history (HHS/ASPE had to rebuild
+-- it from the Wayback Machine), so this table accumulates what the list
+-- said each week — derived from the openFDA bulk we already ingest,
+-- vintage-stamped, no second fetch. Append-only (not mirror-wiped).
+-- snapshot_source: 'openfda-weekly' (forward) | 'wayback-cfm' (Phase 7
+-- historical backfill).
+CREATE TABLE IF NOT EXISTS fda_list_history (
+  snapshot_date   TEXT NOT NULL,
+  snapshot_source TEXT NOT NULL,
+  drug_name_raw   TEXT NOT NULL,
+  drug_name_norm  TEXT NOT NULL,
+  company         TEXT NOT NULL DEFAULT '',
+  status          TEXT NOT NULL DEFAULT '',
+  initial_posting TEXT,
+  update_date     TEXT,
+  PRIMARY KEY (snapshot_date, snapshot_source, drug_name_norm, company, status)
+);
+
 -- Market-wide sweep results (SPEC §10): one sweep_run row per
 -- execution, one sweep_class row per TE-rated equivalence class.
 -- APPEND-ONLY history — deliberately NOT in MIRROR_TABLES, so refreshes

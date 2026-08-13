@@ -36,6 +36,16 @@ jobs:
         run: uv sync --group dev
       - name: Refresh all sources (live downloads, ~2GB)
         run: uv run ndcres --db data/ndcres.db refresh --data-dir data/raw
+      - name: Download the durable history archive (first run tolerated)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download data --pattern ndcres-history.db --dir data \
+            || echo "no archive yet - will be created"
+      - name: Snapshot the FDA shortage list (FDA keeps no history; we do)
+        run: uv run ndcres --db data/ndcres.db fda-snapshot --history data/ndcres-history.db
+      - name: Market-wide sweep (appends to the archive)
+        run: uv run ndcres --db data/ndcres.db sweep --history data/ndcres-history.db
       - name: Export the serving database (size-gated)
         run: uv run ndcres --db data/ndcres.db export --web --out data/web.db
       - name: Smoke-check the export against the golden anchor
@@ -59,6 +69,18 @@ jobs:
             gh release create data --title "Data artifact (rolling)" \
               --notes "Weekly-refreshed serving database. Fetched at build time; never committed."
           gh release upload data data/web.db --clobber
+          gh release upload data data/ndcres-history.db --clobber
+      - name: Quarterly dated archive copy (first run of Jan/Apr/Jul/Oct)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          month=$(date -u +%m); day=$(date -u +%d)
+          case "$month" in 01|04|07|10) ;; *) exit 0 ;; esac
+          [ "$day" -le 7 ] || exit 0
+          quarter=$(( (10#$month - 1) / 3 + 1 ))
+          name="ndcres-history-$(date -u +%Y)Q${quarter}.db"
+          cp data/ndcres-history.db "data/$name"
+          gh release upload data "data/$name" --clobber
       - name: Redeploy the API with the fresh database
         if: ${{ env.VERCEL_TOKEN != '' }}
         env:
