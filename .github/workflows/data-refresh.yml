@@ -24,6 +24,11 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    # Job-level so the redeploy step's `if` can see it: a step's own
+    # env: block is applied AFTER its `if` is evaluated, and `secrets`
+    # is not an allowed context in step-level `if` expressions.
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -55,12 +60,8 @@ jobs:
               --notes "Weekly-refreshed serving database. Fetched at build time; never committed."
           gh release upload data data/web.db --clobber
       - name: Redeploy the API with the fresh database
-        # step-scoped env: is applied AFTER the if is evaluated, so the
-        # condition must read the secrets context directly (an
-        # env.VERCEL_TOKEN check here is always false — silent skip).
-        if: ${{ secrets.VERCEL_TOKEN != '' }}
+        if: ${{ env.VERCEL_TOKEN != '' }}
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: team_dCPoXF5E9H4gY3LCVhlXHm4X
           VERCEL_PROJECT_ID: prj_rD2dW3XpbY8KIHxfSygB778Nxc9x
         working-directory: apiserver
