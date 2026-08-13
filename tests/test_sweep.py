@@ -55,8 +55,13 @@ class TestSweepGoldens:
     ) -> None:
         from ndcres.resolve import resolve
 
-        result = run_sweep(loaded_conn)
-        row = _estradiol_anchor_class(result.classes)
+        eq_class = next(
+            c
+            for c in enumerate_classes(loaded_conn)
+            if c.ingredient_set == "ESTRADIOL"
+            and c.te_code == "AB1"
+            and c.df_route.startswith("SYSTEM")
+        )
         resolution = resolve(loaded_conn, "0378-4642-26")
         legal = set()
         if resolution.seed_annotation and resolution.seed_annotation.dims.ndc11:
@@ -65,7 +70,7 @@ class TestSweepGoldens:
             for annotated in resolution.tiers.get(tier, []):
                 if annotated.dims.ndc11:
                     legal.add(annotated.dims.ndc11)
-        assert set(row.members) == legal
+        assert set(eq_class.members) == legal
 
     def test_verdict_ladder_holds_for_every_class(
         self, loaded_conn: sqlite3.Connection
@@ -84,20 +89,36 @@ class TestSweepGoldens:
                 assert a.verdict == VERDICT_QUIET, row
 
     def test_fda_listed_class_still_reports_fingerprints(
-        self, loaded_conn: sqlite3.Connection
+        self, tmp_path: Path
     ) -> None:
-        # The synthetic-shortage fixture class must exist AND carry an
-        # independent-evidence count despite the verdict short-circuit —
-        # the listed-but-quiet gap list depends on it.
-        result = run_sweep(loaded_conn)
+        # With the synthetic estradiol shortage loaded (the real full
+        # fixture mirrors reality: zero estradiol records), the class
+        # verdict short-circuits to fda-listed — but the independent-
+        # evidence count must STILL be reported: the listed-but-quiet
+        # gap list depends on it.
+        import shutil
+
+        conn = connect(tmp_path / "t.db")
+        refresh(conn, from_dir=FIXTURES)
+        synthetic_dir = tmp_path / "synthetic"
+        synthetic_dir.mkdir()
+        shutil.copy(
+            FIXTURES.parent / "shortages_synthetic_estradiol.json",
+            synthetic_dir / "shortages.json",
+        )
+        refresh(conn, sources=("shortage",), from_dir=synthetic_dir)
+        result = run_sweep(conn)
         listed = [
             row
             for row in result.classes
             if row.assessment.verdict == VERDICT_FDA_LISTED
         ]
-        assert listed, "no fda-listed class in fixtures"
-        for row in listed:
-            assert row.assessment.fingerprints >= 0
+        assert listed, "synthetic shortage produced no fda-listed class"
+        anchor = _estradiol_anchor_class(result.classes)
+        assert anchor.assessment.verdict == VERDICT_FDA_LISTED
+        # The estradiol class has ≥2 independent fingerprints in the
+        # fixtures — the short-circuit must not zero them out.
+        assert anchor.assessment.fingerprints >= 2
 
     def test_no_member_is_sample_or_discontinued_excluded(
         self, loaded_conn: sqlite3.Connection

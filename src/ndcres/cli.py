@@ -95,6 +95,13 @@ def build_parser() -> argparse.ArgumentParser:
     signal_cmd.add_argument("ndc")
     signal_cmd.add_argument("--json", action="store_true", dest="as_json")
 
+    sweep_cmd = subparsers.add_parser(
+        "sweep",
+        help="assess EVERY equivalence class and append the results "
+        "(the market-wide supply picture)",
+    )
+    sweep_cmd.add_argument("--json", action="store_true", dest="as_json")
+
     search_cmd = subparsers.add_parser(
         "search", help="find products by name, strength, form, or NDC fragment"
     )
@@ -364,6 +371,55 @@ def cmd_signal(db_path: Path | None, ndc_text: str, as_json: bool) -> int:
     return 0
 
 
+def cmd_sweep(db_path: Path | None, as_json: bool) -> int:
+    from .provenance import source_refs
+    from .serialize import sweep_summary_dict
+    from .signals import VERDICT_CONSTRAINT
+    from .sweep import persist_sweep, run_sweep
+
+    conn = connect(db_path)
+    result = run_sweep(conn)
+    sweep_id = persist_sweep(conn, result)
+    if as_json:
+        payload = sweep_summary_dict(result, sources=source_refs(conn))
+        payload["sweep_id"] = sweep_id
+        print(json.dumps(payload, indent=2))
+        return 0
+    print(
+        f"sweep #{sweep_id}: {len(result.classes)} equivalence classes "
+        f"assessed in {result.elapsed_seconds:.1f}s "
+        f"(NADAC horizon {result.nadac_horizon or 'n/a'})"
+    )
+    for verdict, count in sorted(result.counts.items()):
+        print(f"  {count:>5}  {verdict}")
+    constraints = sorted(
+        (r for r in result.classes if r.assessment.verdict == VERDICT_CONSTRAINT),
+        key=lambda r: (
+            -r.assessment.fingerprints,
+            -r.assessment.surveyed_count,
+            -r.member_count,
+            r.ingredient_set,
+        ),
+    )
+    if constraints:
+        print()
+        print(
+            "top unlisted constraint classes (independent evidence, no FDA "
+            "listing):"
+        )
+        for row in constraints[:20]:
+            strength = row.strength_norm or "?"
+            print(
+                f"  {row.assessment.fingerprints} fingerprints | "
+                f"{row.ingredient_set} | {row.df_route} | {strength} | "
+                f"TE {row.te_code} | {row.member_count} members | "
+                f"rep {row.rep_ndc11}"
+            )
+    print()
+    print(_DISCLAIMER)
+    return 0
+
+
 def cmd_search(
     db_path: Path | None, query_words: list[str], limit: int, as_json: bool
 ) -> int:
@@ -424,6 +480,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return cmd_explain(args.db, args.ndc_a, args.ndc_b, args.as_json)
     if args.command == "signal":
         return cmd_signal(args.db, args.ndc, args.as_json)
+    if args.command == "sweep":
+        return cmd_sweep(args.db, args.as_json)
     if args.command == "search":
         return cmd_search(args.db, args.query, args.limit, args.as_json)
     if args.command == "export":

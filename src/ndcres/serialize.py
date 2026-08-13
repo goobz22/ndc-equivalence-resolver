@@ -13,7 +13,8 @@ from .explain import REASON_LANGUAGE, TIER_LANGUAGE, Explanation
 from .provenance import ob_application_url
 from .resolve import Annotated, Resolution
 from .search import SearchHit
-from .signals import ClassAssessment, SignalReport
+from .signals import VERDICT_CONSTRAINT, ClassAssessment, SignalReport
+from .sweep import SweepClassRow, SweepResult
 
 # The per-source refs map produced by provenance.source_refs(conn).
 # Every payload carries one (SPEC §9) — CLI and web both pass it in, so
@@ -90,6 +91,50 @@ def search_results_dict(
     return {
         "query": query,
         "results": [search_hit_dict(hit) for hit in hits],
+        "sources": sources,
+        "disclaimer": DISCLAIMER,
+    }
+
+
+def sweep_class_row_dict(row: SweepClassRow) -> dict[str, Any]:
+    return {
+        "ingredient_set": row.ingredient_set,
+        "df_route": row.df_route,
+        "strength_norm": row.strength_norm,
+        "te_code": row.te_code,
+        "rep_ndc11": row.rep_ndc11,
+        "member_count": row.member_count,
+        "marketed_count": row.marketed_count,
+        "assessment": class_assessment_dict(row.assessment),
+    }
+
+
+def sweep_summary_dict(
+    result: SweepResult, *, sources: SourceRefs
+) -> dict[str, Any]:
+    top_constraints = sorted(
+        (row for row in result.classes if row.assessment.verdict == VERDICT_CONSTRAINT),
+        key=lambda row: (
+            -row.assessment.fingerprints,
+            -row.assessment.surveyed_count,
+            -row.member_count,
+            row.ingredient_set,
+        ),
+    )[:25]
+    return {
+        "run_date": result.run_date,
+        "started_at": result.started_at,
+        "nadac_horizon": result.nadac_horizon,
+        "class_count": len(result.classes),
+        "counts": dict(result.counts),
+        "top_constraint_classes": [
+            sweep_class_row_dict(row) for row in top_constraints
+        ],
+        "note": (
+            "Verdicts are inferences from independent public datasets - "
+            "evidence consistent with a constraint, never a confirmed "
+            "shortage and never a statement of availability."
+        ),
         "sources": sources,
         "disclaimer": DISCLAIMER,
     }

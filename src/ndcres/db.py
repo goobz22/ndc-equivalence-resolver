@@ -238,6 +238,52 @@ CREATE TABLE IF NOT EXISTS product_derived (
 -- name, TE code, marketed flag, NADAC presence, representative package.
 -- Rebuilt after every refresh (a derived mirror, like product_ob_link);
 -- ships in the web export so /api/search serves from it.
+-- Market-wide sweep results (SPEC §10): one sweep_run row per
+-- execution, one sweep_class row per TE-rated equivalence class.
+-- APPEND-ONLY history — deliberately NOT in MIRROR_TABLES, so refreshes
+-- never wipe it (the nadac mechanism): this is the longitudinal record
+-- the FDA shortage list does not keep. The verbose evidence `lines` are
+-- NOT persisted (regenerable from the components by the same code
+-- version; compactness is what makes the history durable).
+CREATE TABLE IF NOT EXISTS sweep_run (
+  sweep_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_date          TEXT NOT NULL,
+  started_at        TEXT NOT NULL,
+  nadac_horizon     TEXT,
+  class_count       INTEGER NOT NULL,
+  fda_listed_count  INTEGER NOT NULL,
+  constraint_count  INTEGER NOT NULL,
+  mixed_count       INTEGER NOT NULL,
+  quiet_count       INTEGER NOT NULL,
+  elapsed_seconds   REAL NOT NULL,
+  code_version      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sweep_class (
+  sweep_id          INTEGER NOT NULL REFERENCES sweep_run(sweep_id),
+  ingredient_set    TEXT NOT NULL,
+  df_route          TEXT NOT NULL,
+  strength_norm     TEXT NOT NULL,   -- '' when null (keyable)
+  te_code           TEXT NOT NULL,
+  rep_ndc11         TEXT NOT NULL,
+  member_count      INTEGER NOT NULL,
+  marketed_count    INTEGER NOT NULL,
+  surveyed_count    INTEGER NOT NULL,
+  fda_listed_members INTEGER NOT NULL,
+  drift_pct         REAL,
+  drift_fired       INTEGER NOT NULL,
+  dropout_members   INTEGER NOT NULL,
+  dropout_ratio     REAL,
+  volume_change_pct REAL,
+  volume_quarter    TEXT,
+  recalls           INTEGER NOT NULL,
+  fingerprints      INTEGER NOT NULL,
+  verdict           TEXT NOT NULL,
+  PRIMARY KEY (sweep_id, ingredient_set, df_route, strength_norm, te_code)
+);
+CREATE INDEX IF NOT EXISTS idx_sweep_class_verdict
+  ON sweep_class(sweep_id, verdict);
+
 -- No FK to product: search_doc is rebuilt-from-product after refresh
 -- (integrity by construction), and an FK would block the mirror-replace
 -- DELETE of product on the next refresh — same reason product_ob_link

@@ -54,6 +54,7 @@ export interface ClassAssessment {
   volume_change_pct: number | null;
   volume_quarter: string | null;
   recalls: number;
+  fingerprints: number;
   verdict: string;
   verdict_language: string;
   lines: string[];

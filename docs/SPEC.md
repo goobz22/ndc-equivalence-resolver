@@ -259,15 +259,37 @@ where the data was gotten from."
   and SHA-256; the site-wide legal footer states the public-domain/open-data
   status, MIT/as-is posture, probabilistic framing, and no-tracking promise.
 
-## 10. Market sweep & longitudinal history — lands with Phases 3–4
+## 10. Market sweep & longitudinal history
 
-Contract summary: `ndcres sweep` assesses every marketed TE-rated equivalence
-class (~2,894) with the SAME `class_supply_assessment` the resolve path uses
-(definitional identity pinned by test); results persist append-only
-(`sweep_run`/`sweep_class`, exempt from mirror wipe); weekly pipeline appends
-sweeps + FDA-list snapshots (healthdata.gov fnt4-gy9k) to a durable
-`ndcres-history.db` release asset with integrity guards — the longitudinal record
-the FDA list doesn't keep.
+### 10.1 The sweep (`src/ndcres/sweep.py`, Phase 3 — landed)
+
+- `enumerate_classes` finds every TE-rated equivalence class via
+  `ob_product ⋈ product_ob_link ⋈ product ⋈ package` and applies the LEGAL-class
+  membership filter that mirrors resolve's seed+T1+T2 set: sample packages
+  dropped, discontinued-and-unmarketed members dropped, zero-marketed classes
+  skipped entirely. Coherence is pinned: a class's members equal what resolve
+  computes for a member seed — one verdict engine, two entry points, zero drift.
+- `run_sweep` (pure) assesses every class with the UNCHANGED
+  `class_supply_assessment`; `persist_sweep` appends one `sweep_run` row +
+  per-class `sweep_class` rows (components + fingerprints + verdict; the
+  verbose evidence lines are NOT persisted — regenerable, and compactness is
+  what keeps the history durable at ~0.6MB/run). Tables are append-only
+  (exempt from the mirror wipe — the nadac mechanism); `code_version` is
+  stamped because verdicts are threshold-dependent.
+- `fingerprints` (the count of independent evidence axes) is computed BEFORE
+  the verdict ladder, so an fda-listed class still reports how much independent
+  evidence backs the listing (the listed-but-quiet gap list depends on this).
+- CLI: `ndcres sweep [--json]` — summary counts + the top unlisted-constraint
+  classes, ranked (fingerprints, surveyed breadth, market breadth).
+- The verdict ladder is pinned UNIVERSALLY over every swept class (not just a
+  planted case): fda-listed ⇔ any active record; constraint ⇔ ≥2 fingerprints;
+  mixed ⇔ 1; quiet ⇔ 0.
+
+### 10.2 Longitudinal history — lands with Phase 4
+
+Weekly pipeline appends sweeps + FDA-list snapshots (healthdata.gov fnt4-gy9k)
+to a durable `ndcres-history.db` release asset with integrity guards — the
+record the FDA list doesn't keep.
 
 ## 11. Evidence dossier — lands with Phase 5
 
@@ -423,6 +445,12 @@ the reason and owner. The crosswalk test fails on any dangling reference.
 | INV-8.4 | Results are product-grain, deterministic, resolvable via the representative package, and an unmatchable token yields empty | tests/test_search.py::test_product_grain_no_duplicate_products ; tests/test_search.py::test_deterministic ; tests/test_search.py::test_rep_package_is_resolvable ; tests/test_search.py::test_multi_token_miss_is_empty_not_garbage ; tests/test_search.py::test_empty_query_is_empty ; tests/test_search.py::test_unparseable_number_matches_nothing |
 | INV-8.5 | Marketed outranks unmarketed at equal text score; TE codes surface on hits | tests/test_search.py::test_marketed_ranks_above_unmarketed_at_equal_text_score ; tests/test_search.py::test_te_code_surfaces |
 | INV-8.6 | search_doc covers every product with correct derivations (TE, marketed, NADAC presence, representative package, RxNorm name) and carries provenance | tests/test_search.py::test_docs_exist_for_every_product ; tests/test_search.py::test_anchor_doc_derivations ; tests/test_search.py::test_docs_carry_provenance |
+| INV-10.1 | The anchor estradiol class sweeps to the constraint verdict with zero FDA listings and ≥2 fingerprints | tests/test_sweep.py::test_anchor_class_reads_constraint_without_fda_listing |
+| INV-10.2 | Sweep class membership equals resolve's legal class (seed+T1+T2) — one engine, zero drift | tests/test_sweep.py::test_sweep_members_equal_resolves_legal_class |
+| INV-10.3 | The verdict ladder holds universally over every swept class | tests/test_sweep.py::test_verdict_ladder_holds_for_every_class |
+| INV-10.4 | An fda-listed class still reports its independent fingerprint count (verdict short-circuit never zeroes it) | tests/test_sweep.py::test_fda_listed_class_still_reports_fingerprints |
+| INV-10.5 | No swept member is a sample package or a discontinued-excluded product; enumeration is deterministic with the representative among the members | tests/test_sweep.py::test_no_member_is_sample_or_discontinued_excluded ; tests/test_sweep.py::test_enumeration_is_deterministic |
+| INV-10.6 | Sweep history is append-only, survives refresh wipes, and round-trips the assessment | tests/test_sweep.py::test_append_only_two_runs ; tests/test_sweep.py::test_history_survives_a_refresh ; tests/test_sweep.py::test_persisted_rows_round_trip_the_assessment |
 | INV-14.1 | Web and CLI serve identical JSON (one serializer, JSON-native types, zero drift) | tests/test_web.py::test_web_json_matches_cli_json |
 | INV-14.2 | /api/resolve returns the corrected tiers; unknown NDC → 404 with detail | tests/test_web.py::test_anchor_resolves_with_corrected_tiers ; tests/test_web.py::test_unknown_ndc_is_404_with_detail |
 | INV-14.3 | /api/explain carries the Lyllana prescriber-authorization verdict; /api/signal carries components; /api/meta reports vintages | tests/test_web.py::test_lyllana_verdict ; tests/test_web.py::test_signal_components ; tests/test_web.py::test_vintages_reported |

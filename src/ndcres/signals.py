@@ -381,6 +381,11 @@ class ClassAssessment:
     volume_change_pct: float | None
     volume_quarter: str | None
     recalls: int
+    # Count of independent evidence axes firing (drift, dropout, volume,
+    # recalls) — computed BEFORE the verdict ladder, so an fda-listed
+    # class still reports how much independent evidence backs (or fails
+    # to back) the listing.
+    fingerprints: int
     verdict: str
     verdict_language: str
     lines: tuple[str, ...]
@@ -555,6 +560,7 @@ def class_supply_assessment(
         volume_change_pct=volume_change,
         volume_quarter=volume_quarter,
         recalls=recalls,
+        fingerprints=fingerprints,
         verdict=verdict,
         verdict_language=VERDICT_LANGUAGE[verdict],
         lines=tuple(lines),
