@@ -17,6 +17,9 @@ data/
 # Build-time copies made by scripts/prepare-api.mjs (exist only in builds)
 api/ndcres/
 
+# Deploy-time copies made by apiserver/sync-assets.mjs (refreshed per deploy)
+apiserver/ndcres/
+
 # Web
 node_modules/
 .next/
