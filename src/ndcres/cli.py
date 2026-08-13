@@ -87,6 +87,12 @@ def build_parser() -> argparse.ArgumentParser:
     explain_cmd.add_argument("ndc_b")
     explain_cmd.add_argument("--json", action="store_true", dest="as_json")
 
+    signal_cmd = subparsers.add_parser(
+        "signal", help="supply-stress indicators for one NDC"
+    )
+    signal_cmd.add_argument("ndc")
+    signal_cmd.add_argument("--json", action="store_true", dest="as_json")
+
     return parser
 
 
@@ -185,6 +191,13 @@ def _print_annotated(annotated: Annotated, indent: str = "    ") -> None:
         bits.append("no known shortage record")
     print(f"{indent}{filed}  {name} - {dims.labeler_name or '?'}")
     print(f"{indent}   {' | '.join(bits)}")
+    if annotated.stress_score:
+        print(
+            f"{indent}   supply-stress {annotated.stress_score:.2f} "
+            "(heuristic, not availability)"
+        )
+        for evidence in annotated.stress_evidence:
+            print(f"{indent}     - {evidence}")
     if annotated.result.reasons:
         for reason in annotated.result.reasons:
             language = REASON_LANGUAGE.get(reason, reason)
@@ -328,6 +341,49 @@ def cmd_explain(db_path: Path | None, ndc_a: str, ndc_b: str, as_json: bool) -> 
     return 0
 
 
+def cmd_signal(db_path: Path | None, ndc_text: str, as_json: bool) -> int:
+    from .resolve import resolve_input_ndc11
+    from .signals import signal_report
+
+    conn = connect(db_path)
+    try:
+        ndc11 = resolve_input_ndc11(conn, ndc_text)
+    except (NdcError, ResolveError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
+    report = signal_report(conn, ndc11)
+    if as_json:
+        print(
+            json.dumps(
+                {
+                    "ndc11": report.ndc11,
+                    "stress_score": report.score,
+                    "survey_horizon": report.survey_horizon,
+                    "components": [dataclasses.asdict(c) for c in report.components],
+                    "note": (
+                        "The score is a documented heuristic over public "
+                        "signals. It infers supply stress; it never states "
+                        "availability."
+                    ),
+                    "disclaimer": _DISCLAIMER,
+                },
+                indent=2,
+            )
+        )
+        return 0
+    print(f"Supply-stress signals for {ndc11} ({ndc11_to_hipaa(ndc11)})")
+    if report.survey_horizon:
+        print(f"  NADAC survey horizon: {report.survey_horizon}")
+    for component in report.components:
+        flag = "FIRING" if component.fired else "quiet"
+        print(f"  [{flag:>6}] {component.name} (+{component.contribution:.3f})")
+        print(f"           {component.evidence}")
+    print(f"  score: {report.score:.2f} of 1.00 (heuristic, not availability)")
+    print()
+    print(_DISCLAIMER)
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     # Windows consoles often run cp1252; upstream data carries characters
     # outside it (smart quotes in labeler names). Never crash over glyphs.
@@ -344,6 +400,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return cmd_resolve(args.db, args.ndc, args.as_json)
     if args.command == "explain":
         return cmd_explain(args.db, args.ndc_a, args.ndc_b, args.as_json)
+    if args.command == "signal":
+        return cmd_signal(args.db, args.ndc, args.as_json)
     raise AssertionError("unreachable: argparse enforces a known command")
 
 

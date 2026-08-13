@@ -31,8 +31,9 @@ import sqlite3
 from dataclasses import dataclass, field
 from typing import Literal
 
-from .ndc import NdcError, parse_ndc
+from .ndc import parse_ndc
 from .schedule import ScheduleResult, derive_schedule
+from .signals import signal_report
 
 EqGroup = tuple[str, str, str, str]
 Tier = Literal["T1", "T2", "T3", "T4", "EXCLUDED"]
@@ -576,6 +577,14 @@ def _annotate(
             )
             if row["status"]
         )
+    stress_score: float | None = None
+    stress_evidence: tuple[str, ...] = ()
+    if dims.ndc11 is not None:
+        report = signal_report(conn, dims.ndc11)
+        stress_score = report.score
+        stress_evidence = tuple(
+            f"{c.name}: {c.evidence}" for c in report.components if c.fired
+        )
     return Annotated(
         dims=dims,
         result=result,
@@ -583,6 +592,8 @@ def _annotate(
         nadac_effective=nadac_effective,
         nadac_as_of_last=nadac_as_of,
         shortage_statuses=shortage_statuses,
+        stress_score=stress_score,
+        stress_evidence=stress_evidence,
     )
 
 
