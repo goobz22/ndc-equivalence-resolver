@@ -168,6 +168,13 @@ def export_web_db(
 
     packed = sqlite3.connect(dest_path)
     try:
+        # connect() created the schema in WAL mode, and the flag persists
+        # in the file header. A WAL database cannot be opened from a
+        # read-only filesystem (readers must create -shm), and serverless
+        # hosts mount the bundle read-only — so the ARTIFACT ships in
+        # rollback-journal mode. The VACUUM afterwards rewrites the file
+        # compactly with that header.
+        packed.execute("PRAGMA journal_mode = DELETE")
         packed.execute("VACUUM")
     finally:
         packed.close()

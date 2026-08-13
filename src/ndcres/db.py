@@ -272,6 +272,36 @@ def default_db_path() -> Path:
     return Path.home() / ".ndcres" / "ndcres.db"
 
 
+def connect_readonly(
+    path: str | Path | None = None, *, immutable: bool = False
+) -> sqlite3.Connection:
+    """Open an EXISTING database for serving — never writes, never creates.
+
+    The read-write connect() below cannot even open on a read-only
+    filesystem (it mkdirs, forces WAL — which needs -wal/-shm sidecars —
+    and runs DDL), and serverless hosts mount the bundle read-only.
+
+    immutable=True additionally disables all SQLite locking and change
+    detection. That is correct ONLY when nothing can write the file while
+    it is open: the serverless bundle (guaranteed read-only) or an
+    atomically-replaced export artifact. Never use it on a database a
+    concurrent refresh writes in place.
+    """
+    db_path = Path(path) if path is not None else default_db_path()
+    if not db_path.exists():
+        raise FileNotFoundError(f"ndcres database not found: {db_path}")
+    query = "mode=ro&immutable=1" if immutable else "mode=ro"
+    conn = sqlite3.connect(f"{db_path.resolve().as_uri()}?{query}", uri=True)
+    conn.row_factory = sqlite3.Row
+    # Belt over the ro open: any write attempt errors instead of relying
+    # on filesystem permissions.
+    conn.execute("PRAGMA query_only = ON")
+    conn.execute("PRAGMA cache_size = -65536")  # 64MB
+    conn.execute("PRAGMA temp_store = MEMORY")
+    conn.execute("PRAGMA mmap_size = 268435456")  # 256MB
+    return conn
+
+
 def connect(path: str | Path | None = None) -> sqlite3.Connection:
     """Open (creating if needed) the ndcres database."""
     db_path = Path(path) if path is not None else default_db_path()

@@ -13,12 +13,13 @@ fine at this scale) against NDCRES_DB.
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from typing import Any, Iterator
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 
-from ..db import connect, default_db_path
+from ..db import connect_readonly, default_db_path
 from ..explain import explain as run_explain
 from ..ndc import NdcError
 from ..resolve import ResolveError, resolve as run_resolve, resolve_input_ndc11
@@ -41,7 +42,18 @@ app = FastAPI(
 
 
 def get_conn() -> Iterator[sqlite3.Connection]:
-    conn = connect(default_db_path())
+    # NDCRES_IMMUTABLE=1 (set by the serverless entrypoint) skips SQLite
+    # locking entirely — safe there because the bundle is read-only. Local
+    # dev serves a database a refresh may write in place, so it stays off.
+    try:
+        conn = connect_readonly(
+            default_db_path(),
+            immutable=os.environ.get("NDCRES_IMMUTABLE") == "1",
+        )
+    except FileNotFoundError as error:
+        # A missing database is a broken deploy — say so instead of a
+        # bare 500.
+        raise HTTPException(status_code=500, detail=str(error)) from error
     try:
         yield conn
     finally:

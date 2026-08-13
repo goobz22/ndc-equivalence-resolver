@@ -31,6 +31,9 @@ for _candidate in (_HERE, _UPLOAD_ROOT, _REPO / "src"):
 for _db in (_HERE / "web.db", _UPLOAD_ROOT / "web.db", _REPO / "data" / "web.db"):
     if _db.exists():
         os.environ.setdefault("NDCRES_DB", str(_db))
+        # The bundle is mounted read-only and nothing can write the file
+        # while it serves — let SQLite skip locking/change detection.
+        os.environ.setdefault("NDCRES_IMMUTABLE", "1")
         break
 
 def _load_app():  # -> ASGI application
