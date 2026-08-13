@@ -1,9 +1,10 @@
 """Vercel Python serverless entry.
 
-Vercel routes /api/* here (see vercel.json). The ASGI app receives the
-ORIGINAL request path, so the FastAPI routes in ndcres.web.app match
-unchanged. The database is a read-only build-time artifact fetched into
-data/web.db by scripts/fetch-db.mjs during `next build`.
+Vercel routes /api/* here (vercel.json rewrites). The ASGI app receives
+the ORIGINAL request path, so the FastAPI routes in ndcres.web.app match
+unchanged. scripts/prepare-api.mjs makes this directory self-contained
+at build time: the ndcres package and the read-only web.db artifact are
+copied in (Vercel's Python builder bundles exactly this directory).
 
 If the bundle is broken (missing package, missing database), the import
 failure is surfaced as a JSON 500 carrying the traceback instead of an
@@ -16,18 +17,15 @@ import sys
 import traceback
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_ROOT / "src"))
-os.environ.setdefault("NDCRES_DB", str(_ROOT / "data" / "web.db"))
+_HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(_HERE))
+os.environ.setdefault("NDCRES_DB", str(_HERE / "web.db"))
 
 try:
     from ndcres.web.app import app  # noqa: F401
 except Exception:  # pragma: no cover - deploy-diagnostics path
     _error = traceback.format_exc()
-    _listing = {
-        str(p): sorted(x.name for x in p.iterdir())[:20] if p.is_dir() else "missing"
-        for p in (_ROOT, _ROOT / "src", _ROOT / "data")
-    }
+    _listing = sorted(p.name for p in _HERE.iterdir())[:30]
 
     async def app(scope, receive, send):  # type: ignore[misc,no-redef]
         if scope["type"] != "http":
@@ -36,7 +34,7 @@ except Exception:  # pragma: no cover - deploy-diagnostics path
             {
                 "error": "ndcres failed to load inside the serverless bundle",
                 "traceback": _error,
-                "bundle": _listing,
+                "bundle_dir": _listing,
             },
             indent=2,
         ).encode()
