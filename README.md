@@ -18,6 +18,15 @@ pharmacist-substitutable equivalent is explicitly labeled as requiring
 prescriber authorization. Substitution decisions belong to your pharmacist
 and prescriber.
 
+**Live:** consumer UI at
+[ndc-equivalence-resolver.vercel.app](https://ndc-equivalence-resolver.vercel.app)
+· JSON API at
+[ndcres-api.vercel.app](https://ndcres-api.vercel.app/api/resolve/0378-4642-26)
+(`/api/resolve/{ndc}`, `/api/explain/{a}/{b}`, `/api/signal/{ndc}`,
+`/api/search?q=`, `/api/meta`) — both refreshed weekly from the sources by
+[CI](.github/workflows/data-refresh.yml); deployment architecture in
+[docs/DEPLOY_NOTES.md](docs/DEPLOY_NOTES.md).
+
 ## The problem, concretely
 
 A patient is prescribed an estradiol transdermal patch, twice-weekly,
@@ -362,9 +371,12 @@ since no real one exists as of 2026-08.
 
 ## Roadmap
 
-- Web UI (Next.js + FastAPI) with a printable "what to ask your
-  prescriber" note — deployed on Vercel from this repo.
-- Weekly automated data refresh publishing a ready-made database artifact.
+- ✅ Web UI (Next.js) with a printable "what to ask your prescriber"
+  note — live at
+  [ndc-equivalence-resolver.vercel.app](https://ndc-equivalence-resolver.vercel.app).
+- ✅ Weekly automated data refresh publishing a ready-made database
+  artifact (the rolling [`data` release](https://github.com/goobz22/ndc-equivalence-resolver/releases/tag/data))
+  and redeploying the API with it.
 - Geographic layer (NPPES pharmacy registry) and a path-search stretch
   goal: given location, insurance, and days-supply, the highest-probability
   route to a filled prescription.

@@ -55,7 +55,10 @@ jobs:
               --notes "Weekly-refreshed serving database. Fetched at build time; never committed."
           gh release upload data data/web.db --clobber
       - name: Redeploy the API with the fresh database
-        if: ${{ env.VERCEL_TOKEN != '' }}
+        # step-scoped env: is applied AFTER the if is evaluated, so the
+        # condition must read the secrets context directly (an
+        # env.VERCEL_TOKEN check here is always false — silent skip).
+        if: ${{ secrets.VERCEL_TOKEN != '' }}
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: team_dCPoXF5E9H4gY3LCVhlXHm4X
@@ -63,7 +66,7 @@ jobs:
         working-directory: apiserver
         run: |
           node sync-assets.mjs
-          npx vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN"
+          npx vercel@58 deploy --prod --yes --token "$VERCEL_TOKEN"
       - name: Trigger Vercel deploy hook (optional, UI)
         if: ${{ vars.VERCEL_DEPLOY_HOOK != '' }}
         run: curl -fsS -X POST "${{ vars.VERCEL_DEPLOY_HOOK }}" -o /dev/null
