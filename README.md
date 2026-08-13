@@ -355,8 +355,14 @@ advice, not legal actions.
 
 ## Development
 
+The entire application is specified in **[docs/SPEC.md](docs/SPEC.md)** — domain
+model, sources, tiering semantics, signals, API contracts, deployment — with an
+invariant→test traceability table whose references are mechanically enforced
+(`tests/test_spec_crosswalk.py`). A change is complete only when its spec
+section and pinning tests land in the same commit as the code.
+
 ```console
-$ uv sync --group dev
+$ uv sync --group dev --all-extras
 $ uv run pytest          # fully offline — fixtures are byte-exact slices
                          # of the real files (see tests/fixtures/generate.py)
 $ uv run mypy src        # strict
