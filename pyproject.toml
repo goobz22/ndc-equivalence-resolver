@@ -25,6 +25,9 @@ dependencies = []
 
 [project.optional-dependencies]
 web = ["fastapi>=0.115", "uvicorn>=0.30"]
+# For machines behind TLS-inspecting proxies/AV whose interception CA the
+# OS trusts but OpenSSL rejects: delegates verification to the platform.
+nativetls = ["truststore>=0.10"]
 
 [project.scripts]
 ndcres = "ndcres.cli:main"
