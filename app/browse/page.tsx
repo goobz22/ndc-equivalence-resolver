@@ -45,17 +45,26 @@ function BrowseResults() {
   return (
     <>
       <p className="tier-sub">
-        {results.length} package{results.length === 1 ? "" : "s"} matching
-        &quot;{query}&quot; — click one to resolve its equivalents.
+        {results.length} product{results.length === 1 ? "" : "s"} matching
+        &quot;{query}&quot; — click one to resolve its equivalents. Search
+        understands names, strengths (&quot;.05&quot;, &quot;50 mcg&quot;),
+        forms (&quot;patch&quot;), manufacturers, and NDC fragments, in any
+        order.
       </p>
       {results.map((result) => (
-        <div className="card" key={result.ndc11}>
+        <div className="card" key={result.ndc9}>
           <h3>
-            <Link href={`/ndc/${result.ndc11}`}>
-              {[result.name, result.name_suffix].filter(Boolean).join(" ") ||
-                result.generic_name ||
-                "(unnamed)"}
-            </Link>{" "}
+            {result.ndc11 ? (
+              <Link href={`/ndc/${result.ndc11}`}>
+                {[result.name, result.name_suffix].filter(Boolean).join(" ") ||
+                  result.generic_name ||
+                  "(unnamed)"}
+              </Link>
+            ) : (
+              [result.name, result.name_suffix].filter(Boolean).join(" ") ||
+              result.generic_name ||
+              "(unnamed)"
+            )}{" "}
             <span className="sub">{result.ndc_as_filed}</span>
           </h3>
           <div className="sub">
@@ -68,8 +77,15 @@ function BrowseResults() {
             {result.dosage_form ? (
               <span className="badge">{result.dosage_form.toLowerCase()}</span>
             ) : null}
-            {result.pack_count ? (
-              <span className="badge">{result.pack_count}-count</span>
+            {result.te_code ? (
+              <span className="badge">TE {result.te_code}</span>
+            ) : null}
+            <span className="badge">
+              {result.package_count} package
+              {result.package_count === 1 ? "" : "s"}
+            </span>
+            {!result.marketed ? (
+              <span className="badge warn">not marketed</span>
             ) : null}
           </div>
         </div>

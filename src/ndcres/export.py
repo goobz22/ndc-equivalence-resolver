@@ -28,8 +28,10 @@ from .signals import survey_horizon
 
 # Vercel's serverless budget is 250MB uncompressed for the whole bundle
 # (function + deps + this file). Deps run ~40MB, so the database gets a
-# hard 150MB ceiling with headroom. CI fails the deploy on breach.
-SIZE_GATE_BYTES = 150 * 1024 * 1024
+# hard 160MB ceiling (~200MB bundle, ~50MB clear of the platform limit).
+# Raised from 150MB when search_doc joined the export (SPEC §8).
+# CI fails the deploy on breach.
+SIZE_GATE_BYTES = 160 * 1024 * 1024
 
 _FULL_COPY_TABLES = (
     "meta",
@@ -41,6 +43,7 @@ _FULL_COPY_TABLES = (
     "rx_rel",
     "rx_ndc",
     "product_derived",
+    "search_doc",
 )
 
 

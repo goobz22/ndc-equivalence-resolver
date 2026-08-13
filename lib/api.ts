@@ -92,15 +92,19 @@ export interface SignalReport {
 }
 
 export interface SearchResult {
-  ndc11: string;
+  ndc9: string;
+  ndc11: string | null; // representative package for this product
   ndc_as_filed: string;
   name: string | null;
   name_suffix: string | null;
   generic_name: string | null;
   labeler: string | null;
   dosage_form: string | null;
+  form_family: string | null;
   strength: string | null;
-  pack_count: number | null;
+  te_code: string | null;
+  marketed: boolean;
+  package_count: number;
 }
 
 export interface MetaSource {

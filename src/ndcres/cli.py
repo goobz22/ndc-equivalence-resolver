@@ -95,6 +95,15 @@ def build_parser() -> argparse.ArgumentParser:
     signal_cmd.add_argument("ndc")
     signal_cmd.add_argument("--json", action="store_true", dest="as_json")
 
+    search_cmd = subparsers.add_parser(
+        "search", help="find products by name, strength, form, or NDC fragment"
+    )
+    search_cmd.add_argument(
+        "query", nargs="+", help='e.g. "estradiol .05" or "dotti" or 0378-4642'
+    )
+    search_cmd.add_argument("--limit", type=int, default=25)
+    search_cmd.add_argument("--json", action="store_true", dest="as_json")
+
     export_cmd = subparsers.add_parser(
         "export", help="produce a trimmed read-only database for web serving"
     )
@@ -341,6 +350,39 @@ def cmd_signal(db_path: Path | None, ndc_text: str, as_json: bool) -> int:
     return 0
 
 
+def cmd_search(
+    db_path: Path | None, query_words: list[str], limit: int, as_json: bool
+) -> int:
+    from .search import search
+    from .serialize import search_results_dict
+
+    query = " ".join(query_words)
+    conn = connect(db_path)
+    hits = search(conn, query, limit=limit)
+    if as_json:
+        print(json.dumps(search_results_dict(query, hits), indent=2))
+        return 0
+    if not hits:
+        print(f'no products match "{query}"')
+        return 0
+    print(f'{len(hits)} product(s) matching "{query}":')
+    for hit in hits:
+        display_name = " ".join(
+            part for part in (hit.name, hit.name_suffix) if part
+        ) or (hit.generic_name or "(unnamed)")
+        status = "marketed" if hit.marketed else "not marketed"
+        te_badge = f" TE:{hit.te_code}" if hit.te_code else ""
+        strength = f" {hit.strength}" if hit.strength else ""
+        print(
+            f"  {hit.ndc_as_filed:<14} {display_name}{strength}"
+            f" — {hit.generic_name or '?'} · {hit.labeler or '?'}"
+            f" · {hit.package_count} pkg · {status}{te_badge}"
+        )
+    print()
+    print(_DISCLAIMER)
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     # Windows consoles often run cp1252; upstream data carries characters
     # outside it (smart quotes in labeler names). Never crash over glyphs.
@@ -359,6 +401,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return cmd_explain(args.db, args.ndc_a, args.ndc_b, args.as_json)
     if args.command == "signal":
         return cmd_signal(args.db, args.ndc, args.as_json)
+    if args.command == "search":
+        return cmd_search(args.db, args.query, args.limit, args.as_json)
     if args.command == "export":
         from .db import default_db_path
         from .export import export_web_db

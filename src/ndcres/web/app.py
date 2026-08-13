@@ -23,10 +23,12 @@ from ..db import connect_readonly, default_db_path
 from ..explain import explain as run_explain
 from ..ndc import NdcError
 from ..resolve import ResolveError, resolve as run_resolve, resolve_input_ndc11
+from ..search import search as run_search
 from ..serialize import (
     DISCLAIMER,
     explanation_dict,
     resolution_dict,
+    search_results_dict,
     signal_dict,
 )
 from ..signals import signal_report
@@ -97,45 +99,7 @@ def api_search(
     limit: int = Query(default=25, ge=1, le=100),
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> dict[str, Any]:
-    needle = f"%{q.strip()}%"
-    rows = conn.execute(
-        """
-        SELECT p.ndc9, p.proprietary_name, p.proprietary_suffix,
-               p.nonproprietary_name, p.labeler_name, p.dosage_form_raw,
-               p.strength_numerator, p.strength_unit,
-               k.ndc11, k.package_ndc_filed, k.pack_count
-        FROM product p JOIN package k USING (ndc9)
-        WHERE p.proprietary_name LIKE ? COLLATE NOCASE
-           OR p.nonproprietary_name LIKE ? COLLATE NOCASE
-           OR k.package_ndc_filed LIKE ?
-           OR k.ndc11 LIKE ?
-        ORDER BY p.proprietary_name, k.ndc11
-        LIMIT ?
-        """,
-        (needle, needle, needle, needle, limit),
-    ).fetchall()
-    return {
-        "query": q,
-        "results": [
-            {
-                "ndc11": row["ndc11"],
-                "ndc_as_filed": row["package_ndc_filed"],
-                "name": row["proprietary_name"],
-                "name_suffix": row["proprietary_suffix"],
-                "generic_name": row["nonproprietary_name"],
-                "labeler": row["labeler_name"],
-                "dosage_form": row["dosage_form_raw"],
-                "strength": (
-                    f"{row['strength_numerator']} {row['strength_unit']}"
-                    if row["strength_numerator"]
-                    else None
-                ),
-                "pack_count": row["pack_count"],
-            }
-            for row in rows
-        ],
-        "disclaimer": DISCLAIMER,
-    }
+    return search_results_dict(q, run_search(conn, q, limit=limit))
 
 
 @app.get("/api/meta")

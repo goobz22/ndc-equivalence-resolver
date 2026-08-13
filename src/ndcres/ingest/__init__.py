@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from .. import link
+from .. import link, search
 from ..db import clear_mirror_tables, finish_run, start_run
 from . import enforcement, nadac, ndc_directory, orangebook, rxnorm, sdud, shortage
 from .fetch import (
@@ -31,6 +31,9 @@ SOURCES = ("ndc", "orangebook", "rxnorm", "nadac", "shortage", "sdud", "enforcem
 
 # Sources whose rows feed product_ob_link.
 _LINK_INPUTS = {"ndc", "orangebook"}
+
+# Sources whose rows feed search_doc ("link" so TE-code changes propagate).
+_SEARCH_INPUTS = {"ndc", "orangebook", "rxnorm", "nadac", "link"}
 
 
 @dataclass(frozen=True)
@@ -123,6 +126,8 @@ def refresh(
 
     if _LINK_INPUTS & set(counts):
         counts["link"] = _rebuild_link(conn)
+    if _SEARCH_INPUTS & set(counts):
+        counts["search"] = _rebuild_search(conn)
     return counts
 
 
@@ -172,5 +177,20 @@ def _rebuild_link(conn: sqlite3.Connection) -> int:
         )
         clear_mirror_tables(conn, "link")
         count = link.build_product_ob_link(conn, run_id)
+        finish_run(conn, run_id, row_count=count)
+    return count
+
+
+def _rebuild_search(conn: sqlite3.Connection) -> int:
+    # After the link rebuild, so TE codes land in the docs.
+    with conn:
+        run_id = start_run(
+            conn,
+            source="search",
+            source_url="derived://search_doc",
+            fetched_at=_now(),
+        )
+        clear_mirror_tables(conn, "search")
+        count = search.build_search_docs(conn, run_id)
         finish_run(conn, run_id, row_count=count)
     return count

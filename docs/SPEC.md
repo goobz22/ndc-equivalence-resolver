@@ -201,14 +201,36 @@ Every finding carries citable evidence detail.
   else → `no-independent-stress-evidence` (which reads "quiet", never "available").
 - Verdict language lives ONLY in `VERDICT_LANGUAGE` (single home).
 
-## 8. Search engine — lands with Phase 1
+## 8. Search engine (`src/ndcres/search.py`)
 
-Contract summary (full detail in the phase): tokenized structured search over a
-per-ndc9 `search_doc` table rebuilt each refresh; token classes NDC / strength /
-name-form with AND semantics and order-independence; strength aliases generated
-from canonical forms ("estradiol .05" ≡ ".05 estradiol" ≡ "estradiol 0.05 mg" ≡
-"50 mcg estradiol"); product-grain grouped results; deterministic ranking
-(word > prefix > substring; marketed first). No FTS5 dependence.
+Structured drug search: the query is parsed into CLASSIFIED tokens that AND
+together across field classes, token order never matters.
+
+- **Token classes**: NDC-ish (digits/hyphens; hyphenated forms normalize via
+  ndc.py segmentation rules, bare 8-digit also tries the 4-4 shape's padding);
+  strength-ish (".05", "0.05 mg", "0.05mg", "50 mcg", "0.06%" — canonical-key
+  candidates generated AT QUERY TIME with the same decimal canonicalization
+  ingest uses, matched exactly against `product.strength_norm`; a bare number
+  covers both mg and µg readings; aliases live in the parser, never stored);
+  form words ("patch", "tablet" → the curated form_family values with a raw
+  dosage-form fallback); everything else is a name term over proprietary
+  name+suffix, generic name, ingredient set, labeler, and best RxNorm name.
+  A bare 4–7-digit number is ambiguous (NDC fragment or strength) and matches
+  if EITHER interpretation does.
+- **`search_doc`** (one row per ndc9; a derived mirror rebuilt after every
+  refresh, like product_ob_link — and like it, deliberately no FK to product,
+  which would block the mirror-replace lifecycle): best RxNorm concept name
+  (SCD-preferred, the same TTY rule resolve uses), TE code, marketed flag,
+  NADAC presence, representative package (min marketed non-sample ndc11),
+  package count, run_id provenance. Ships in the web export.
+- **Results are PRODUCT-grain** (one hit per ndc9, no duplicate-package spam),
+  each carrying the representative package so result links resolve directly.
+- **Ranking (deterministic)**: per name term the best field match scores
+  word-exact (3) > word-prefix (2) > substring (1); +2 marketed, +0.5
+  NADAC-surveyed; ties break on display name then ndc9.
+- A query with an unmatchable token returns empty — never garbage.
+- No FTS5 dependence (serverless SQLite builds vary); the corpus (114k
+  products) serves tokenized indexed queries directly.
 
 ## 9. Provenance & attribution — lands with Phase 2
 
@@ -377,6 +399,12 @@ the reason and owner. The crosswalk test fails on any dangling reference.
 | INV-7.4 | Signal reports are wall-clock independent | tests/test_signals.py::test_report_is_wall_clock_independent |
 | INV-7.5 | Stress feeds ranking: stressed equivalents rank last in tier; dropout outranks healthy but not shortage | tests/test_signals.py::test_stressed_equivalent_ranks_last_in_tier1 ; tests/test_signals.py::test_dropout_outranks_healthy_but_not_shortage |
 | INV-7.6 | Class assessment: constraint verdict without any FDA listing; FDA-listed dominates; quiet reads quiet-not-available; members are the legal class; demand surge is a fingerprint | tests/test_class_assessment.py::test_estradiol_class_shows_constraint_without_fda_listing ; tests/test_class_assessment.py::test_fda_listed_dominates ; tests/test_class_assessment.py::test_quiet_class_reads_quiet_not_available ; tests/test_class_assessment.py::test_assessment_members_are_the_legal_class ; tests/test_class_assessment.py::test_demand_surge_is_a_constraint_fingerprint |
+| INV-8.1 | "estradiol .05" finds the 0.05 patch family, and strength strictly narrows the ingredient's results | tests/test_search.py::test_estradiol_dot05_finds_the_patch_family ; tests/test_search.py::test_strength_actually_narrows |
+| INV-8.2 | Token order never matters; mg/mcg/glued spellings are equivalent; number+unit words join into one token | tests/test_search.py::test_token_order_never_matters ; tests/test_search.py::test_unit_spellings_are_equivalent ; tests/test_search.py::test_tokenizer_joins_number_and_unit ; tests/test_search.py::test_strength_keys_mg_and_mcg_meet ; tests/test_search.py::test_bare_number_covers_both_readings ; tests/test_search.py::test_percent_becomes_prefix |
+| INV-8.3 | Form words filter to the curated family; brand, labeler, and NDC-fragment tokens match their fields (hyphen-insensitive, padded shapes included) | tests/test_search.py::test_form_word_narrows_to_patches ; tests/test_search.py::test_brand_word ; tests/test_search.py::test_labeler_word_narrows ; tests/test_search.py::test_ndc_two_segment_hyphenated ; tests/test_search.py::test_ndc_bare_eight_digits_hyphen_insensitive ; tests/test_search.py::test_ndc_full_package_spelling |
+| INV-8.4 | Results are product-grain, deterministic, resolvable via the representative package, and an unmatchable token yields empty | tests/test_search.py::test_product_grain_no_duplicate_products ; tests/test_search.py::test_deterministic ; tests/test_search.py::test_rep_package_is_resolvable ; tests/test_search.py::test_multi_token_miss_is_empty_not_garbage ; tests/test_search.py::test_empty_query_is_empty ; tests/test_search.py::test_unparseable_number_matches_nothing |
+| INV-8.5 | Marketed outranks unmarketed at equal text score; TE codes surface on hits | tests/test_search.py::test_marketed_ranks_above_unmarketed_at_equal_text_score ; tests/test_search.py::test_te_code_surfaces |
+| INV-8.6 | search_doc covers every product with correct derivations (TE, marketed, NADAC presence, representative package, RxNorm name) and carries provenance | tests/test_search.py::test_docs_exist_for_every_product ; tests/test_search.py::test_anchor_doc_derivations ; tests/test_search.py::test_docs_carry_provenance |
 | INV-14.1 | Web and CLI serve identical JSON (one serializer, JSON-native types, zero drift) | tests/test_web.py::test_web_json_matches_cli_json |
 | INV-14.2 | /api/resolve returns the corrected tiers; unknown NDC → 404 with detail | tests/test_web.py::test_anchor_resolves_with_corrected_tiers ; tests/test_web.py::test_unknown_ndc_is_404_with_detail |
 | INV-14.3 | /api/explain carries the Lyllana prescriber-authorization verdict; /api/signal carries components; /api/meta reports vintages | tests/test_web.py::test_lyllana_verdict ; tests/test_web.py::test_signal_components ; tests/test_web.py::test_vintages_reported |

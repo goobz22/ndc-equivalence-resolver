@@ -11,6 +11,7 @@ from typing import Any
 
 from .explain import REASON_LANGUAGE, TIER_LANGUAGE, Explanation
 from .resolve import Annotated, Resolution
+from .search import SearchHit
 from .signals import ClassAssessment, SignalReport
 
 DISCLAIMER = (
@@ -51,6 +52,34 @@ def annotated_dict(annotated: Annotated) -> dict[str, Any]:
         "shortage_statuses": list(annotated.shortage_statuses),
         "stress_score": annotated.stress_score,
         "stress_evidence": list(annotated.stress_evidence),
+    }
+
+
+def search_hit_dict(hit: SearchHit) -> dict[str, Any]:
+    return {
+        "ndc9": hit.ndc9,
+        # The representative package — kept under the key "ndc11" so
+        # result links resolve directly.
+        "ndc11": hit.rep_ndc11,
+        "ndc_as_filed": hit.ndc_as_filed,
+        "name": hit.name,
+        "name_suffix": hit.name_suffix,
+        "generic_name": hit.generic_name,
+        "labeler": hit.labeler,
+        "dosage_form": hit.dosage_form,
+        "form_family": hit.form_family,
+        "strength": hit.strength,
+        "te_code": hit.te_code,
+        "marketed": hit.marketed,
+        "package_count": hit.package_count,
+    }
+
+
+def search_results_dict(query: str, hits: tuple[SearchHit, ...]) -> dict[str, Any]:
+    return {
+        "query": query,
+        "results": [search_hit_dict(hit) for hit in hits],
+        "disclaimer": DISCLAIMER,
     }
 
 

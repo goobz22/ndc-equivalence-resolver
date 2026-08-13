@@ -238,8 +238,12 @@ CREATE TABLE IF NOT EXISTS product_derived (
 -- name, TE code, marketed flag, NADAC presence, representative package.
 -- Rebuilt after every refresh (a derived mirror, like product_ob_link);
 -- ships in the web export so /api/search serves from it.
+-- No FK to product: search_doc is rebuilt-from-product after refresh
+-- (integrity by construction), and an FK would block the mirror-replace
+-- DELETE of product on the next refresh — same reason product_ob_link
+-- carries none.
 CREATE TABLE IF NOT EXISTS search_doc (
-  ndc9          TEXT PRIMARY KEY REFERENCES product(ndc9),
+  ndc9          TEXT PRIMARY KEY,
   rx_name       TEXT,
   te_code       TEXT,
   marketed      INTEGER NOT NULL DEFAULT 0,
