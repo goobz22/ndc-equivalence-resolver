@@ -7,13 +7,17 @@ of availability; equivalence facts and supply inference must never be
 conflated (design principle: probabilities, never booleans, anywhere
 availability is implied).
 
-Components and fixed weights:
+Components and fixed weights (tuned 2026-08 against the motivating
+real-world case — an estradiol-patch shortage that pharmacies lived
+through for months while FDA's list stayed empty):
 
-    shortage   0.60  an openFDA shortage record with status Current or
-                     To Be Discontinued. Absence means "no known
-                     shortage record" - NOT "available" (the shortage
-                     dataset is sparse; whole drug families have no
-                     records at all).
+    shortage   0.50  an openFDA record with status Current or To Be
+                     Discontinued. That list is manufacturer-SELF-
+                     REPORTED and LAGGING: whole real shortages never
+                     appear on it (zero transdermal-estradiol records
+                     exist during a documented patch shortage). So its
+                     absence is deliberately weak evidence and is worded
+                     as "not on FDA's shortage list", never "available".
     dropout    0.25  the NDC has stopped appearing in weekly NADAC
                      surveys. NADAC derives from real pharmacy invoice
                      transactions, so dropout often precedes a shortage
@@ -21,12 +25,18 @@ Components and fixed weights:
                      horizon (max as-of date), never the wall clock -
                      deterministic and offline-friendly. Fires at >= 4
                      weeks, scales linearly to full weight at 8.
-    drift      0.15  trailing-12-month acquisition-cost change: the
-                     latest price vs the price in force one year before
+    drift      0.25  trailing-12-month acquisition-cost change: the
+                     latest rate vs the rate in force one year before
                      the latest effective date (cross-year capable).
-                     Fires at >= +15%, scales to full weight at +50%.
-                     Note: CMS damps generic rates with a 3-month moving
-                     average since 2024-12, so real drift is understated.
+                     Fires at >= +10%, scales to full weight at +35%.
+                     CMS damps generic rates with a 3-month moving
+                     average (since 2024-12), so any sustained climb on
+                     this index understates the spot market - which is
+                     why the thresholds are low: during the motivating
+                     shortage this was the ONLY public signal moving.
+                     NADAC class-prices interchangeable generics, so a
+                     generic's climb usually reflects its whole
+                     equivalence class tightening at once.
 
 Marketing status is a separate axis reported alongside - never folded
 into the score (discontinuation is not shortage).
@@ -38,14 +48,14 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-_WEIGHT_SHORTAGE = 0.60
+_WEIGHT_SHORTAGE = 0.50
 _WEIGHT_DROPOUT = 0.25
-_WEIGHT_DRIFT = 0.15
+_WEIGHT_DRIFT = 0.25
 
 _DROPOUT_FIRE_WEEKS = 4.0
 _DROPOUT_FULL_WEEKS = 8.0
-_DRIFT_FIRE_PCT = 0.15
-_DRIFT_FULL_PCT = 0.50
+_DRIFT_FIRE_PCT = 0.10
+_DRIFT_FULL_PCT = 0.35
 
 _ACTIVE_SHORTAGE_STATUSES = {"Current", "To Be Discontinued"}
 
@@ -119,8 +129,10 @@ def shortage_component(conn: sqlite3.Connection, ndc11: str) -> SignalComponent:
         fired=False,
         contribution=0.0,
         evidence=(
-            "no known shortage record in openFDA (absence is not evidence "
-            "of availability)"
+            "not on FDA's official drug-shortage list (openFDA) - that list "
+            "is manufacturer-self-reported and lagging; real-world pharmacy "
+            "backorders often appear late or never, so absence is weak "
+            "evidence and never evidence of availability"
         ),
     )
 
@@ -163,8 +175,8 @@ def dropout_component(
 
 def drift_component(conn: sqlite3.Connection, ndc11: str) -> SignalComponent:
     rows = conn.execute(
-        "SELECT effective_date, price FROM nadac WHERE ndc11 = ? "
-        "ORDER BY effective_date",
+        "SELECT effective_date, price, classification FROM nadac "
+        "WHERE ndc11 = ? ORDER BY effective_date",
         (ndc11,),
     ).fetchall()
     if len(rows) < 2:
@@ -195,11 +207,17 @@ def drift_component(conn: sqlite3.Connection, ndc11: str) -> SignalComponent:
     )
     if pct >= _DRIFT_FIRE_PCT:
         scale = min(pct / _DRIFT_FULL_PCT, 1.0)
+        note = " - sustained climb on a 3-month-damped index (spot increases run higher)"
+        if latest["classification"] == "G":
+            note += (
+                "; NADAC class-prices interchangeable generics, so this "
+                "reflects the whole equivalence class tightening"
+            )
         return SignalComponent(
             name="price-drift",
             fired=True,
             contribution=_WEIGHT_DRIFT * scale,
-            evidence=evidence + " - rising cost on a survey-priced product",
+            evidence=evidence + note,
         )
     return SignalComponent(
         name="price-drift", fired=False, contribution=0.0, evidence=evidence
