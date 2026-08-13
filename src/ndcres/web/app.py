@@ -107,6 +107,21 @@ def api_search(
     )
 
 
+@app.get("/api/gaps")
+def api_gaps(
+    limit: int = Query(default=100, ge=1, le=500),
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> dict[str, Any]:
+    from ..gaps import GapError, gap_report
+    from ..serialize import gap_report_dict
+
+    try:
+        report = gap_report(conn)
+    except GapError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return gap_report_dict(report, sources=source_refs(conn), limit=limit)
+
+
 @app.get("/api/dossier/{ndc}")
 def api_dossier(
     ndc: str, conn: sqlite3.Connection = Depends(get_conn)

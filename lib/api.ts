@@ -124,6 +124,44 @@ export interface SearchResult {
   package_count: number;
 }
 
+export interface GapEntry {
+  ingredient_set: string;
+  df_route: string;
+  strength_norm: string;
+  te_code: string;
+  rep_ndc11: string;
+  member_count: number;
+  marketed_count: number;
+  surveyed_count: number;
+  fda_listed_members: number;
+  drift_pct: number | null;
+  drift_fired: boolean;
+  dropout_members: number;
+  dropout_ratio: number | null;
+  volume_change_pct: number | null;
+  volume_quarter: string | null;
+  recalls: number;
+  fingerprints: number;
+  verdict: string;
+}
+
+export interface GapReport {
+  sweep: {
+    sweep_id: number;
+    run_date: string;
+    nadac_horizon: string | null;
+    class_count: number;
+    counts: Record<string, number>;
+  };
+  unlisted_constraints: GapEntry[];
+  fda_listed: GapEntry[];
+  listed_but_quiet: GapEntry[];
+  totals: Record<string, number>;
+  note: string;
+  sources: SourceRefs;
+  disclaimer: string;
+}
+
 export interface MetaSource {
   source: string;
   fetched_at: string;
@@ -154,6 +192,7 @@ export const api = {
     get<{ query: string; results: SearchResult[]; sources: SourceRefs }>(
       `/api/search?q=${encodeURIComponent(q)}`,
     ),
+  gaps: (limit = 100) => get<GapReport>(`/api/gaps?limit=${limit}`),
   meta: () =>
     get<{ sources: MetaSource[]; registry: SourceRefs; disclaimer: string }>(
       "/api/meta",

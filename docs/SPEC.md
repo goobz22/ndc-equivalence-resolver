@@ -338,13 +338,29 @@ history, provenance refs), two renderers:
 - Language discipline pinned: "shortage confirmed" never appears;
   "evidence consistent with" and "not medical advice" always do.
 
-## 12. Gap report — lands with Phase 6
+## 12. Gap report (`src/ndcres/gaps.py`, Phase 6 — landed)
 
-Contract summary: reads the LATEST sweep only (no request-time compute); three
-lists — `unlisted_constraints` (headline), `fda_listed` (concordant),
-`listed_but_quiet`; ranking (fingerprints, surveyed, members, drift, key);
-measurement-language headline; quality gate (hand-review of top rows, root-cause
-fixes only) before the page ships publicly.
+- `gap_report(conn, sweep_id=None)` reads the LATEST persisted sweep — never
+  recomputes at request time — and partitions every class:
+  `unlisted_constraints` (constraint verdict ⇒ zero active FDA records by
+  construction — the headline), `fda_listed` (concordant), and
+  `listed_but_quiet` (listed with zero independent fingerprints — the
+  instrument disagreeing in the other direction, shown for honesty).
+- Ranking (deterministic, documented): fingerprints DESC, surveyed_count DESC
+  (guards tiny-N artifacts), member_count DESC (impact proxy), drift DESC
+  nulls-last, class key. SDUD units rejected as an impact weight (units are
+  incomparable across dose forms).
+- Surfaces: `GET /api/gaps?limit=` (404 with a helpful message when no sweep
+  exists — e.g. a stale artifact), `ndcres gaps [--json]`, `/gaps` page with
+  the measurement-language headline, fingerprint chips, human strength labels
+  (`RAW:` keys render verbatim labeled "as filed"), row links to the resolve
+  view, and source tags. Nav link shipped AFTER the quality gate.
+- **Quality gate (operator: "get it perfect")**: recorded in
+  docs/dossiers/2026-08-gaps-quality-review.md — statistical scan of the top
+  50 (0 tiny-N rows) + deep-check of the top 6 against raw tables (all show
+  the coherent price-up/volume-down constraint pattern), zero ad-hoc row
+  suppression, re-review triggers named (threshold changes; >50% top-10
+  composition shift week-over-week).
 
 ## 13. Backtest methodology — lands with Phase 7
 
@@ -496,6 +512,10 @@ the reason and owner. The crosswalk test fails on any dangling reference.
 | INV-11.3 | Dossier language discipline: never "shortage confirmed"; absence renders lagging-list wording; reproduction commands present; deterministic output | tests/test_dossier.py::test_language_discipline ; tests/test_dossier.py::test_absence_reads_lagging_never_available ; tests/test_dossier.py::test_deterministic |
 | INV-11.4 | The exhibit pack keeps external references strictly AFTER the "NOT pipeline data" banner, with access dates, lawyer note, and 10.30 structure | tests/test_dossier.py::test_structure_and_separation ; tests/test_dossier.py::test_external_refs_carry_access_dates |
 | INV-11.5 | Dossiers build for TE-rated classes, refuse unrated seeds helpfully, and the payload carries provenance + disclaimer | tests/test_dossier.py::test_builds_for_the_anchor ; tests/test_dossier.py::test_unrated_seed_fails_helpfully ; tests/test_dossier.py::test_dict_carries_provenance_and_disclaimer |
+| INV-12.1 | The anchor estradiol class leads the unlisted-constraint list in the fixture universe | tests/test_gaps.py::test_estradiol_leads_the_unlisted_list |
+| INV-12.2 | The partition is clean: unlisted ⇒ constraint verdict + zero FDA members; listed_but_quiet ⊆ fda_listed with zero fingerprints | tests/test_gaps.py::test_partition_is_clean |
+| INV-12.3 | Gap ranking is deterministic and evidence-ordered; counts match the run summary | tests/test_gaps.py::test_ranking_is_deterministic_and_ordered ; tests/test_gaps.py::test_counts_match_the_run_summary |
+| INV-12.4 | A class moves lists when FDA lists it; no sweep yields a loud, helpful error; the payload carries provenance | tests/test_gaps.py::test_fda_listed_class_moves_lists_when_listed ; tests/test_gaps.py::test_no_sweep_is_a_loud_error ; tests/test_gaps.py::test_payload_carries_provenance |
 | INV-14.1 | Web and CLI serve identical JSON (one serializer, JSON-native types, zero drift) | tests/test_web.py::test_web_json_matches_cli_json |
 | INV-14.2 | /api/resolve returns the corrected tiers; unknown NDC → 404 with detail | tests/test_web.py::test_anchor_resolves_with_corrected_tiers ; tests/test_web.py::test_unknown_ndc_is_404_with_detail |
 | INV-14.3 | /api/explain carries the Lyllana prescriber-authorization verdict; /api/signal carries components; /api/meta reports vintages | tests/test_web.py::test_lyllana_verdict ; tests/test_web.py::test_signal_components ; tests/test_web.py::test_vintages_reported |

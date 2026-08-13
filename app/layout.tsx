@@ -22,6 +22,7 @@ export default function RootLayout({
             </Link>
             <nav>
               <Link href="/browse">Browse</Link>
+              <Link href="/gaps">Supply gaps</Link>
               <Link href="/sources">Sources</Link>
               <a
                 href="https://github.com/goobz22/ndc-equivalence-resolver"

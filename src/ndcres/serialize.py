@@ -10,6 +10,7 @@ import dataclasses
 from typing import Any
 
 from .explain import REASON_LANGUAGE, TIER_LANGUAGE, Explanation
+from .gaps import GapEntry, GapReport
 from .provenance import ob_application_url
 from .resolve import Annotated, Resolution
 from .search import SearchHit
@@ -91,6 +92,45 @@ def search_results_dict(
     return {
         "query": query,
         "results": [search_hit_dict(hit) for hit in hits],
+        "sources": sources,
+        "disclaimer": DISCLAIMER,
+    }
+
+
+def gap_entry_dict(entry: GapEntry) -> dict[str, Any]:
+    return dataclasses.asdict(entry)
+
+
+def gap_report_dict(
+    report: GapReport, *, sources: SourceRefs, limit: int = 100
+) -> dict[str, Any]:
+    return {
+        "sweep": {
+            "sweep_id": report.sweep_id,
+            "run_date": report.run_date,
+            "nadac_horizon": report.nadac_horizon,
+            "class_count": report.class_count,
+            "counts": dict(report.counts),
+        },
+        "unlisted_constraints": [
+            gap_entry_dict(e) for e in report.unlisted_constraints[:limit]
+        ],
+        "fda_listed": [gap_entry_dict(e) for e in report.fda_listed[:limit]],
+        "listed_but_quiet": [
+            gap_entry_dict(e) for e in report.listed_but_quiet[:limit]
+        ],
+        "totals": {
+            "unlisted_constraints": len(report.unlisted_constraints),
+            "fda_listed": len(report.fda_listed),
+            "listed_but_quiet": len(report.listed_but_quiet),
+        },
+        "note": (
+            "Verdicts are inferences from independent public datasets - "
+            "evidence consistent with a constraint, never a confirmed "
+            "shortage and never a statement of availability. The FDA list "
+            "is manufacturer-self-reported and lagging; these lists measure "
+            "the gap between it and the public evidence."
+        ),
         "sources": sources,
         "disclaimer": DISCLAIMER,
     }

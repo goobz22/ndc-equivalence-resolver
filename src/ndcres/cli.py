@@ -129,6 +129,14 @@ def build_parser() -> argparse.ArgumentParser:
     search_cmd.add_argument("--limit", type=int, default=25)
     search_cmd.add_argument("--json", action="store_true", dest="as_json")
 
+    gaps_cmd = subparsers.add_parser(
+        "gaps",
+        help="the gap between the FDA shortage list and the public evidence "
+        "(reads the latest sweep)",
+    )
+    gaps_cmd.add_argument("--json", action="store_true", dest="as_json")
+    gaps_cmd.add_argument("--limit", type=int, default=25)
+
     dossier_cmd = subparsers.add_parser(
         "dossier",
         help="the full evidence dossier for one equivalence class "
@@ -469,6 +477,51 @@ def cmd_sweep(
     return 0
 
 
+def cmd_gaps(db_path: Path | None, as_json: bool, limit: int) -> int:
+    from .gaps import GapError, gap_report
+    from .provenance import source_refs
+    from .serialize import gap_report_dict
+
+    conn = connect(db_path)
+    try:
+        report = gap_report(conn)
+    except GapError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
+    if as_json:
+        print(
+            json.dumps(
+                gap_report_dict(report, sources=source_refs(conn), limit=limit),
+                indent=2,
+            )
+        )
+        return 0
+    print(
+        f"gap report over sweep #{report.sweep_id} ({report.run_date}): "
+        f"{report.class_count} classes"
+    )
+    print(
+        f"  {len(report.unlisted_constraints)} evidence-consistent-with-"
+        "constraint, ZERO FDA listing (the gap)"
+    )
+    print(f"  {len(report.fda_listed)} on the FDA list (concordant)")
+    print(
+        f"  {len(report.listed_but_quiet)} on the FDA list with zero "
+        "independent fingerprints"
+    )
+    print()
+    for entry in report.unlisted_constraints[:limit]:
+        strength = entry.strength_norm or "?"
+        print(
+            f"  {entry.fingerprints} fp | {entry.ingredient_set} | "
+            f"{entry.df_route} | {strength} | TE {entry.te_code} | "
+            f"{entry.member_count} members | rep {entry.rep_ndc11}"
+        )
+    print()
+    print(_DISCLAIMER)
+    return 0
+
+
 def cmd_dossier(
     db_path: Path | None,
     ndc_text: str,
@@ -592,6 +645,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return cmd_fda_snapshot(args.db, args.history)
     if args.command == "dossier":
         return cmd_dossier(args.db, args.ndc, args.as_json, args.md, args.exhibits)
+    if args.command == "gaps":
+        return cmd_gaps(args.db, args.as_json, args.limit)
     if args.command == "search":
         return cmd_search(args.db, args.query, args.limit, args.as_json)
     if args.command == "export":
