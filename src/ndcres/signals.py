@@ -47,6 +47,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 from datetime import date, timedelta
+from typing import Sequence
 
 _WEIGHT_SHORTAGE = 0.50
 _WEIGHT_DROPOUT = 0.25
@@ -95,6 +96,12 @@ def shortage_component(conn: sqlite3.Connection, ndc11: str) -> SignalComponent:
         """,
         (ndc11, ndc11[:9]),
     ).fetchall()
+    return shortage_component_from_rows(rows)
+
+
+def shortage_component_from_rows(
+    rows: Sequence[sqlite3.Row],
+) -> SignalComponent:
     active = [r for r in rows if r["status"] in _ACTIVE_SHORTAGE_STATUSES]
     if active:
         top = active[0]
@@ -145,6 +152,12 @@ def dropout_component(
         (ndc11,),
     ).fetchone()
     last_seen = row["last_seen"] if row is not None else None
+    return dropout_component_from_last_seen(last_seen, horizon)
+
+
+def dropout_component_from_last_seen(
+    last_seen: str | None, horizon: str | None
+) -> SignalComponent:
     if last_seen is None or horizon is None:
         return SignalComponent(
             name="survey-dropout",
@@ -173,35 +186,39 @@ def dropout_component(
     )
 
 
-def _drift_baseline_latest(
-    conn: sqlite3.Connection, ndc11: str
-) -> tuple[sqlite3.Row, sqlite3.Row] | None:
-    """(baseline, latest) NADAC rows for the trailing-year drift, or None.
-
-    The baseline is the rate in force one year before the latest
-    effective date (newest rate at or before the boundary, falling back
-    to the oldest known rate).
-    """
-    rows = conn.execute(
+def _nadac_series(conn: sqlite3.Connection, ndc11: str) -> list[sqlite3.Row]:
+    return conn.execute(
         "SELECT effective_date, price, classification FROM nadac "
         "WHERE ndc11 = ? ORDER BY effective_date",
         (ndc11,),
     ).fetchall()
-    if len(rows) < 2:
+
+
+def _drift_pair(
+    series: Sequence[sqlite3.Row],
+) -> tuple[sqlite3.Row, sqlite3.Row] | None:
+    """(baseline, latest) rows for the trailing-year drift, or None.
+
+    The baseline is the rate in force one year before the latest
+    effective date (newest rate at or before the boundary, falling back
+    to the oldest known rate). ``series`` must be sorted by
+    effective_date ascending.
+    """
+    if len(series) < 2:
         return None
-    latest = rows[-1]
+    latest = series[-1]
     window_start = _iso_to_date(latest["effective_date"]) - timedelta(days=365)
     in_force = [
-        r for r in rows if _iso_to_date(r["effective_date"]) <= window_start
+        r for r in series if _iso_to_date(r["effective_date"]) <= window_start
     ]
-    baseline = in_force[-1] if in_force else rows[0]
+    baseline = in_force[-1] if in_force else series[0]
     if baseline["price"] <= 0:
         return None
     return baseline, latest
 
 
 def drift_pct(conn: sqlite3.Connection, ndc11: str) -> float | None:
-    pair = _drift_baseline_latest(conn, ndc11)
+    pair = _drift_pair(_nadac_series(conn, ndc11))
     if pair is None:
         return None
     baseline, latest = pair
@@ -209,7 +226,11 @@ def drift_pct(conn: sqlite3.Connection, ndc11: str) -> float | None:
 
 
 def drift_component(conn: sqlite3.Connection, ndc11: str) -> SignalComponent:
-    pair = _drift_baseline_latest(conn, ndc11)
+    return drift_component_from_series(_nadac_series(conn, ndc11))
+
+
+def drift_component_from_series(series: Sequence[sqlite3.Row]) -> SignalComponent:
+    pair = _drift_pair(series)
     if pair is None:
         return SignalComponent(
             name="price-drift",
@@ -245,10 +266,44 @@ def drift_component(conn: sqlite3.Connection, ndc11: str) -> SignalComponent:
 
 def signal_report(conn: sqlite3.Connection, ndc11: str) -> SignalReport:
     horizon = survey_horizon(conn)
+    series = _nadac_series(conn, ndc11)
+    shortage_rows = conn.execute(
+        """
+        SELECT status, availability, shortage_reason, update_date
+        FROM shortage WHERE ndc11 = ? OR ndc9 = ?
+        ORDER BY update_date DESC
+        """,
+        (ndc11, ndc11[:9]),
+    ).fetchall()
+    last_seen_row = conn.execute(
+        "SELECT max(as_of_last) AS last_seen FROM nadac WHERE ndc11 = ?",
+        (ndc11,),
+    ).fetchone()
+    last_seen = last_seen_row["last_seen"] if last_seen_row else None
+    return signal_report_from(
+        ndc11,
+        nadac_series=series,
+        nadac_last_seen=last_seen,
+        shortage_rows=shortage_rows,
+        horizon=horizon,
+    )
+
+
+def signal_report_from(
+    ndc11: str,
+    *,
+    nadac_series: Sequence[sqlite3.Row],
+    nadac_last_seen: str | None,
+    shortage_rows: Sequence[sqlite3.Row],
+    horizon: str | None,
+) -> SignalReport:
+    """Assemble a report from prefetched rows — the batch-friendly core
+    the resolver uses so N candidates cost a handful of queries, not
+    a handful per candidate."""
     components = (
-        shortage_component(conn, ndc11),
-        dropout_component(conn, ndc11, horizon),
-        drift_component(conn, ndc11),
+        shortage_component_from_rows(shortage_rows),
+        dropout_component_from_last_seen(nadac_last_seen, horizon),
+        drift_component_from_series(nadac_series),
     )
     score = min(sum(c.contribution for c in components), 1.0)
     return SignalReport(
