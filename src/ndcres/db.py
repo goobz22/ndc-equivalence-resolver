@@ -188,6 +188,30 @@ CREATE TABLE IF NOT EXISTS shortage (
 CREATE INDEX IF NOT EXISTS idx_shortage_ndc11 ON shortage(ndc11);
 CREATE INDEX IF NOT EXISTS idx_shortage_ndc9 ON shortage(ndc9);
 
+CREATE TABLE IF NOT EXISTS sdud (
+  ndc11         TEXT NOT NULL,
+  year          INTEGER NOT NULL,
+  quarter       INTEGER NOT NULL,
+  units         REAL NOT NULL DEFAULT 0,
+  prescriptions REAL NOT NULL DEFAULT 0,
+  state_rows    INTEGER NOT NULL DEFAULT 0,
+  run_id        INTEGER NOT NULL REFERENCES source_run(run_id),
+  PRIMARY KEY (ndc11, year, quarter)
+);
+
+CREATE TABLE IF NOT EXISTS enforcement (
+  record_hash        TEXT PRIMARY KEY,
+  ndc9               TEXT,
+  product_ndcs       TEXT,
+  classification     TEXT,
+  status             TEXT,
+  recall_initiation  TEXT,
+  product_description TEXT,
+  reason             TEXT,
+  run_id             INTEGER NOT NULL REFERENCES source_run(run_id)
+);
+CREATE INDEX IF NOT EXISTS idx_enforcement_ndc9 ON enforcement(ndc9);
+
 CREATE TABLE IF NOT EXISTS special_case (
   scope           TEXT NOT NULL,
   key             TEXT NOT NULL,
@@ -235,6 +259,8 @@ MIRROR_TABLES: dict[str, tuple[str, ...]] = {
     "orangebook": ("ob_product",),
     "rxnorm": ("rx_concept", "rx_rel", "rx_ndc"),
     "shortage": ("shortage",),
+    "sdud": ("sdud",),
+    "enforcement": ("enforcement",),
     "link": ("product_ob_link",),
 }
 
