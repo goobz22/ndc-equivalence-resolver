@@ -233,6 +233,21 @@ CREATE TABLE IF NOT EXISTS product_derived (
   run_id     INTEGER NOT NULL REFERENCES source_run(run_id),
   PRIMARY KEY (ndc9, attr)
 );
+
+-- Derived per-product search support (SPEC §8): best RxNorm concept
+-- name, TE code, marketed flag, NADAC presence, representative package.
+-- Rebuilt after every refresh (a derived mirror, like product_ob_link);
+-- ships in the web export so /api/search serves from it.
+CREATE TABLE IF NOT EXISTS search_doc (
+  ndc9          TEXT PRIMARY KEY REFERENCES product(ndc9),
+  rx_name       TEXT,
+  te_code       TEXT,
+  marketed      INTEGER NOT NULL DEFAULT 0,
+  has_nadac     INTEGER NOT NULL DEFAULT 0,
+  rep_ndc11     TEXT,
+  package_count INTEGER NOT NULL DEFAULT 0,
+  run_id        INTEGER NOT NULL REFERENCES source_run(run_id)
+);
 """
 
 # Curated upstream-data corrections. Each row is applied at ingest (the
@@ -262,6 +277,7 @@ MIRROR_TABLES: dict[str, tuple[str, ...]] = {
     "sdud": ("sdud",),
     "enforcement": ("enforcement",),
     "link": ("product_ob_link",),
+    "search": ("search_doc",),
 }
 
 
