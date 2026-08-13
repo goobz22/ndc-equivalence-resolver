@@ -26,21 +26,21 @@ from pathlib import Path
 from .db import connect
 from .signals import survey_horizon
 
-SIZE_GATE_BYTES = 100 * 1024 * 1024
+# Vercel's serverless budget is 250MB uncompressed for the whole bundle
+# (function + deps + this file). Deps run ~40MB, so the database gets a
+# hard 150MB ceiling with headroom. CI fails the deploy on breach.
+SIZE_GATE_BYTES = 150 * 1024 * 1024
 
 _FULL_COPY_TABLES = (
     "meta",
     "source_run",
     "special_case",
-    "product",
     "ob_product",
     "product_ob_link",
     "rx_concept",
     "rx_rel",
     "rx_ndc",
     "product_derived",
-    "sdud",  # already aggregated to (ndc, year, quarter) at ingest
-    "enforcement",
 )
 
 
@@ -64,6 +64,24 @@ def export_web_db(
                     f"INSERT INTO web.{table} SELECT * FROM main.{table}"  # noqa: S608
                 )
 
+            # product: drop the raw substance blob (ingredient_set is the
+            # canonical form every consumer uses).
+            conn.execute("DELETE FROM web.product")
+            conn.execute(
+                """
+                INSERT INTO web.product
+                SELECT ndc9, product_ndc_filed, product_type,
+                       proprietary_name, proprietary_suffix,
+                       nonproprietary_name, dosage_form_raw, route_raw,
+                       marketing_category, appl_type, appl_no, appl_no_raw,
+                       labeler_name, NULL, ingredient_set, ingredient_count,
+                       strength_numerator, strength_unit, strength_norm,
+                       form_family, dea_schedule, start_marketing,
+                       end_marketing, ob_link_status, run_id
+                FROM main.product
+                """
+            )
+
             # package: keep rows, drop the verbose description blob.
             conn.execute("DELETE FROM web.package")
             conn.execute(
@@ -74,6 +92,26 @@ def export_web_db(
                        start_marketing, end_marketing, run_id
                 FROM main.package
                 """
+            )
+
+            # sdud: the volume-trend signal compares the latest quarter to
+            # the same quarter a year earlier — two years suffice.
+            conn.execute("DELETE FROM web.sdud")
+            conn.execute(
+                """
+                INSERT INTO web.sdud
+                SELECT * FROM main.sdud
+                WHERE year >= (SELECT max(year) - 1 FROM main.sdud)
+                """
+            )
+
+            # enforcement: only NDC-indexed records participate in the
+            # class assessment; unindexed free-text records are dead
+            # weight in the serving bundle.
+            conn.execute("DELETE FROM web.enforcement")
+            conn.execute(
+                "INSERT INTO web.enforcement "
+                "SELECT * FROM main.enforcement WHERE ndc9 IS NOT NULL"
             )
 
             # shortage: keep rows, drop raw JSON.

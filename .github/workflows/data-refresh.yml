@@ -1,0 +1,57 @@
+# The weekly data pipeline:
+# refresh → export → publish the serving database → trigger deploy.
+#
+# Publishes data/web.db to the rolling 'data' release tag, which the
+# Vercel build fetches (scripts/fetch-db.mjs). If a VERCEL_DEPLOY_HOOK
+# secret is configured, a deploy is triggered afterward so the site
+# rebuilds with the fresh artifact.
+#
+# workflow_dispatch stays available for manual runs; the schedule is
+# Wednesday 14:00 UTC — after CMS posts the weekly NADAC file.
+
+name: data-refresh
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 14 * * 3"
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Sync dependencies
+        run: uv sync --group dev
+      - name: Refresh all sources (live downloads, ~2GB)
+        run: uv run ndcres --db data/ndcres.db refresh --data-dir data/raw
+      - name: Export the serving database (size-gated)
+        run: uv run ndcres --db data/ndcres.db export --web --out data/web.db
+      - name: Smoke-check the export against the golden anchor
+        run: |
+          NDCRES_DB=data/web.db uv run python - <<'PY'
+          from ndcres.db import connect
+          from ndcres.resolve import resolve
+          res = resolve(connect("data/web.db"), "0378-4642-26")
+          t1 = {a.dims.ndc11 for a in res.tiers["T1"]}
+          assert "65162099308" in t1, f"Dotti missing from live T1: {sorted(t1)}"
+          t3 = {a.dims.ndc11 for a in res.tiers["T3"]}
+          assert "65162014908" in t3, "Lyllana missing from live T3"
+          assert res.class_assessment is not None
+          print("smoke ok:", res.class_assessment.verdict)
+          PY
+      - name: Publish to the rolling data release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view data >/dev/null 2>&1 || \
+            gh release create data --title "Data artifact (rolling)" \
+              --notes "Weekly-refreshed serving database. Fetched at build time; never committed."
+          gh release upload data data/web.db --clobber
+      - name: Trigger Vercel deploy
+        if: ${{ vars.VERCEL_DEPLOY_HOOK != '' }}
+        run: curl -fsS -X POST "${{ vars.VERCEL_DEPLOY_HOOK }}" -o /dev/null

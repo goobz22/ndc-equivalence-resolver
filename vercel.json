@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "functions": {
+    "api/index.py": {
+      "runtime": "@vercel/python@4.7.1",
+      "includeFiles": "{data/web.db,src/ndcres/**}",
+      "maxDuration": 30,
+      "memory": 1024
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index" }
+  ]
+}

@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/fetch-db.mjs && next build",
+    "build:local": "next build",
     "start": "next start",
     "lint": "next lint"
   },

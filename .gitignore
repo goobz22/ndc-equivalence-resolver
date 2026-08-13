@@ -16,9 +16,11 @@ data/
 
 # Web
 node_modules/
-web/.next/
-web/out/
+.next/
+out/
+next-env.d.ts
 .vercel/
+tsconfig.tsbuildinfo
 
 # OS / editor
 .DS_Store

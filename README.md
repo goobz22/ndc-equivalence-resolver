@@ -101,21 +101,41 @@ the interesting rows:
 
 ```text
 Seed: 0378-4642-26  Estradiol - Mylan Pharmaceuticals Inc.
-      TE AB1 | 2/wk | NADAC $7.98/unit (seen 2026-08-12) | no known shortage record
+      TE AB1 | 2/wk | NADAC $7.98/unit (seen 2026-08-12) | not on FDA shortage list
+      SUPPLY-STRESS 0.12 (heuristic, not availability)
+        - price-drift: acquisition cost 6.85607 (eff 2025-06-18) -> 7.97659
+          (eff 2026-07-22): +16.3% over the trailing year
+
+SUPPLY PICTURE for this drug's equivalence class (8 products):
+  >> NOT on FDA's shortage list, but two or more independent public signals
+     show the pattern of a supply constraint. FDA's list is manufacturer-
+     self-reported and lagging; treat this drug as hard to fill and take
+     the full equivalents list to the pharmacy.
+     - FDA's official shortage list: no entry for any class member
+     - class acquisition cost +16.3% over the trailing year on the
+       CMS-damped NADAC index (generics are class-priced, so this is the
+       whole class moving)
+     - 0 of 5 surveyed class members have stopped appearing in the weekly
+       NADAC pharmacy survey (>= 8 weeks)
+     - national Medicaid dispensed volume for the class: +76.0% in 2026Q1
+       vs the same quarter a year earlier (a demand surge of this size
+       strains manufacturing capacity - the classic setup for backorders)
+     - 2 recall record(s) against class members in the openFDA enforcement
+       data (trailing two years)
 
 TIER 1 - direct substitutes (pharmacist-level swap in most states)
     66758-147-83  Vivelle-Dot - Sandoz Inc
-       TE AB1 | 8-count | 2/wk | NADAC $18.41/unit (eff 2026-07-22, seen 2026-08-12) | no known shortage record
+       TE AB1 | 8-count | 2/wk | NADAC $18.41/unit (eff 2026-07-22, seen 2026-08-12) | not on FDA shortage list
     65162-993-08  DOTTI - Amneal Pharmaceuticals LLC
-       TE AB1 | 8-count | 2/wk | NADAC $7.98/unit (eff 2026-07-22, seen 2026-08-12) | no known shortage record
-       supply-stress 0.05 (heuristic, not availability)
-         - price-drift: acquisition cost 6.85607 (eff 2025-06-18) -> 7.97659 (eff 2026-07-22): +16.3% over the trailing year - rising cost on a survey-priced product
+       TE AB1 | 8-count | 2/wk | NADAC $7.98/unit (eff 2026-07-22, seen 2026-08-12) | not on FDA shortage list
+       supply-stress 0.12 (heuristic, not availability)
+         - price-drift: acquisition cost 6.85607 (eff 2025-06-18) -> 7.97659 (eff 2026-07-22): +16.3% over the trailing year
     0781-7144-83  Estradiol - Sandoz Inc
        TE AB1 | 8-count | 2/wk | NADAC $7.98/unit (eff 2026-07-22, seen 2026-08-12) | ...
     70710-1193-8  Estradiol - Zydus Pharmaceuticals USA Inc.
        TE AB1 | 8-count | 2/wk | NADAC $7.98/unit (eff 2026-07-22, seen 2026-08-12) | ...
     72162-2034-2  DOTTI - Bryant Ranch Prepack
-       TE AB1 | 8-count | 2/wk | no NADAC record | no known shortage record
+       TE AB1 | 8-count | 2/wk | no NADAC record | not on FDA shortage list
     69238-1631-7  Estradiol - Amneal Pharmaceuticals NY LLC ...
     70771-1565-8  Estradiol - Zydus Lifesciences Limited ...
 
@@ -123,7 +143,7 @@ TIER 3 - requires prescriber authorization
     These need a NEW or AMENDED prescription naming the product - ask the prescriber.
     ...
     65162-149-08  LYLLANA - Amneal Pharmaceuticals LLC
-       TE AB3 | 8-count | 2/wk | NADAC $7.98/unit (eff 2026-07-22, seen 2026-08-12) | no known shortage record
+       TE AB3 | 8-count | 2/wk | NADAC $7.98/unit (eff 2026-07-22, seen 2026-08-12) | not on FDA shortage list
        [different-te-subgroup] The two products carry DIFFERENT therapeutic-equivalence
        codes, so the FDA has not rated them interchangeable. Orange Book preface:
        "Drugs coded with a three-character code under a heading are considered
@@ -142,11 +162,16 @@ TIER 4 - different delivery form (informational; clinical decision)
     ... (gels, sprays, oral tablets)
 ```
 
-Notice what the live data shows: **the whole AB1 generic class is
-class-priced at $7.98/patch and drifting +16% over the trailing year** —
-the supply-stress signal firing on real data — while Lyllana, listed by
-this project's own brief as a direct substitute, sits in Tier 3 where the
-Orange Book actually puts it.
+Notice what the live data shows. This drug ran a real, months-long
+shortage — pharmacies took weeks to fill, mail-order went out of stock —
+and **FDA's official shortage list never carried a single record for it**
+(that list is manufacturer-self-reported and lagging). The supply-picture
+verdict finds the constraint anyway, by triangulating independent public
+evidence: the class-priced acquisition cost climbing +16% on a damped
+index, Medicaid dispensed volume up +76% year over year (a demand surge
+outrunning manufacturing), and recalls against class members. Meanwhile
+Lyllana, listed by this project's own brief as a direct substitute, sits
+in Tier 3 where the Orange Book actually puts it.
 
 Tiers, in order:
 
@@ -225,26 +250,37 @@ Real output:
 Supply-stress signals for 00378464226 (00378-4642-26)
   NADAC survey horizon: 2026-08-12
   [ quiet] shortage (+0.000)
-           no known shortage record in openFDA (absence is not evidence of availability)
+           not on FDA's official drug-shortage list (openFDA) - that list is
+           manufacturer-self-reported and lagging; real-world pharmacy
+           backorders often appear late or never, so absence is weak evidence
+           and never evidence of availability
   [ quiet] survey-dropout (+0.000)
            present in the NADAC survey through 2026-08-12
-  [FIRING] price-drift (+0.049)
+  [FIRING] price-drift (+0.117)
            acquisition cost 6.85607 (eff 2025-06-18) -> 7.97659 (eff 2026-07-22):
-           +16.3% over the trailing year - rising cost on a survey-priced product
-  score: 0.05 of 1.00 (heuristic, not availability)
+           +16.3% over the trailing year - sustained climb on a 3-month-damped
+           index; NADAC class-prices interchangeable generics, so this reflects
+           the whole equivalence class tightening
+  score: 0.12 of 1.00 (heuristic, not availability)
 ```
 
-Three independent components, each with citable evidence:
+Per-NDC components, each with citable evidence:
 
 | component | weight | fires when |
 |---|---|---|
-| shortage | 0.60 | an openFDA record with status Current / To Be Discontinued |
+| shortage | 0.50 | an openFDA record with status Current / To Be Discontinued. Deliberately NOT the dominant signal: FDA's list is manufacturer-self-reported and misses whole real shortages |
 | survey-dropout | 0.25 | the NDC stops appearing in weekly NADAC surveys (≥ 4 weeks behind the dataset horizon) — derived from real pharmacy invoice transactions, this often *precedes* a shortage bulletin |
-| price-drift | 0.15 | trailing-12-month acquisition cost up ≥ 15% |
+| price-drift | 0.25 | trailing-12-month acquisition cost up ≥ 10% (the NADAC index is damped by a 3-month moving average, so sustained movement on it understates the spot market) |
 
-The combined score is a documented heuristic that **infers supply
-stress**. It is never a statement of availability — absence of a shortage
-record renders as "no known shortage record", not "available".
+On top of the per-NDC score, `resolve` renders a **class-level supply
+picture** over the whole legal equivalence class (interchangeable
+products move together): FDA-list status, class price drift, the ratio
+of surveyed class members that stopped transacting, the Medicaid
+dispensed-volume trend (collapse *or* demand surge — both strain
+supply), and recalls against class members. Two or more independent
+fingerprints yield *"evidence consistent with a supply constraint"* —
+deliberately probabilistic wording. Nothing anywhere is ever a statement
+of availability, in either direction.
 
 ## Data sources
 
@@ -257,7 +293,9 @@ redistributed with this repository.**
 | [FDA Orange Book](https://www.fda.gov/drugs/drug-approvals-and-databases/orange-book-data-files) (EOBZIP) | **therapeutic-equivalence codes**, applications, RLD/RS flags | US public domain |
 | [RxNorm Current Prescribable Content](https://www.nlm.nih.gov/research/umls/rxnorm/docs/prescribe.html) | clinical-identity graph, NDC ↔ RXCUI, wear-duration evidence | no license required (the full RxNorm release is UTS-gated and deliberately **not** used) |
 | [openFDA drug shortages](https://open.fda.gov/apis/drug/drugshortages/) (bulk export) | manufacturer-reported shortage records | CC0/public domain |
+| [openFDA drug enforcement](https://open.fda.gov/apis/drug/enforcement/) (bulk export) | recall records — supply shocks against a class | CC0/public domain |
 | [NADAC](https://data.medicaid.gov/) (data.medicaid.gov) | weekly real pharmacy acquisition costs per NDC | US public domain |
+| [Medicaid State Drug Utilization](https://data.medicaid.gov/) | quarterly dispensed volume per NDC (aggregated to national at ingest) — the demand axis | US public domain |
 
 Courtesy note: this product uses publicly available data from the U.S.
 National Library of Medicine (NLM), National Institutes of Health; NLM is

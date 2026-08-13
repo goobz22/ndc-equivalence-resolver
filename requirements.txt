@@ -1,0 +1,4 @@
+# Vercel Python function dependencies. The ndcres package itself is
+# bundled via includeFiles + sys.path (see api/index.py) — its core is
+# stdlib-only by design.
+fastapi>=0.115
