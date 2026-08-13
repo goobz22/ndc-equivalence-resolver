@@ -11,7 +11,7 @@ from typing import Any
 
 from .explain import REASON_LANGUAGE, TIER_LANGUAGE, Explanation
 from .resolve import Annotated, Resolution
-from .signals import SignalReport
+from .signals import ClassAssessment, SignalReport
 
 DISCLAIMER = (
     "ndcres surfaces supply-chain equivalence facts from public FDA/NLM/CMS "
@@ -54,6 +54,10 @@ def annotated_dict(annotated: Annotated) -> dict[str, Any]:
     }
 
 
+def class_assessment_dict(assessment: ClassAssessment) -> dict[str, Any]:
+    return dataclasses.asdict(assessment)
+
+
 def resolution_dict(resolution: Resolution) -> dict[str, Any]:
     return {
         "seed": annotated_dict(resolution.seed_annotation)
@@ -61,6 +65,9 @@ def resolution_dict(resolution: Resolution) -> dict[str, Any]:
         else None,
         "seed_status": resolution.seed_status,
         "notes": list(resolution.notes),
+        "class_assessment": class_assessment_dict(resolution.class_assessment)
+        if resolution.class_assessment
+        else None,
         "tiers": {
             tier: [annotated_dict(a) for a in members]
             for tier, members in resolution.tiers.items()

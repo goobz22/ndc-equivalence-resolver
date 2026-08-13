@@ -281,6 +281,11 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA foreign_keys = ON")
+    # Read-heavy workload over a few hundred MB: a generous page cache and
+    # memory-mapped reads keep the resolve path off the disk.
+    conn.execute("PRAGMA cache_size = -65536")  # 64MB
+    conn.execute("PRAGMA temp_store = MEMORY")
+    conn.execute("PRAGMA mmap_size = 268435456")  # 256MB
     conn.executescript(_DDL)
     conn.execute(
         "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)",

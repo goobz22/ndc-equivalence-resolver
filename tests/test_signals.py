@@ -56,29 +56,36 @@ class TestDrift:
         drift = next(c for c in report.components if c.name == "price-drift")
         assert drift.fired
         assert "+22.5%" in drift.evidence
-        assert drift.contribution == pytest.approx(0.15 * (0.2253 / 0.5), abs=0.005)
+        assert drift.contribution == pytest.approx(0.25 * (0.2253 / 0.35), abs=0.005)
+        # Class-priced generics: the evidence says the climb is class-wide.
+        assert "equivalence class" in drift.evidence
 
     def test_quiet_for_flat_price(self, loaded_conn: sqlite3.Connection) -> None:
         report = signal_report(loaded_conn, "00555088602")
         drift = next(c for c in report.components if c.name == "price-drift")
         assert not drift.fired
 
-    def test_quiet_for_modest_rise(self, loaded_conn: sqlite3.Connection) -> None:
-        # Sandoz AG series rises ~10% — below the 15% firing threshold.
+    def test_ten_percent_rise_fires_softly(
+        self, loaded_conn: sqlite3.Connection
+    ) -> None:
+        # Sandoz AG series rises ~10% — at the tuned threshold for the
+        # CMS-damped index (the motivating shortage moved this signal
+        # while FDA's list stayed empty; sensitivity is deliberate).
         report = signal_report(loaded_conn, "00781714483")
         drift = next(c for c in report.components if c.name == "price-drift")
-        assert not drift.fired
-        assert "+10." in drift.evidence  # trend still reported as evidence
+        assert drift.fired
+        assert drift.contribution < 0.08
 
 
 class TestShortage:
-    def test_absence_reads_no_known_record_never_available(
+    def test_absence_reads_lagging_list_never_available(
         self, loaded_conn: sqlite3.Connection
     ) -> None:
         report = signal_report(loaded_conn, "00378464226")
         shortage = next(c for c in report.components if c.name == "shortage")
         assert not shortage.fired
-        assert "no known shortage record" in shortage.evidence
+        assert "not on FDA's official drug-shortage list" in shortage.evidence
+        assert "lagging" in shortage.evidence
         assert "availability" in shortage.evidence  # the explicit caveat
 
     def test_synthetic_shortage_fires(self, tmp_path: Path) -> None:
@@ -86,9 +93,9 @@ class TestShortage:
         report = signal_report(conn, "00378464226")
         shortage = next(c for c in report.components if c.name == "shortage")
         assert shortage.fired
-        assert shortage.contribution == pytest.approx(0.60)
+        assert shortage.contribution == pytest.approx(0.50)
         assert "Demand increase" in shortage.evidence
-        assert report.score >= 0.6
+        assert report.score >= 0.5
 
     def test_resolved_record_does_not_fire(
         self, loaded_conn: sqlite3.Connection
@@ -125,7 +132,7 @@ class TestRankingIntegration:
         # ...but it carries the shortage record, so it ranks LAST.
         assert tier1[-1] == "00378464226"
         anchor = resolution.tiers["T1"][-1]
-        assert anchor.stress_score is not None and anchor.stress_score >= 0.6
+        assert anchor.stress_score is not None and anchor.stress_score >= 0.5
         assert any("shortage" in e for e in anchor.stress_evidence)
 
     def test_dropout_outranks_healthy_but_not_shortage(

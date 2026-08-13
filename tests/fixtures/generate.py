@@ -577,6 +577,86 @@ def nadac_csv(
     return buffer.getvalue()
 
 
+# -------------------------------------------------------------------- SDUD
+
+SDUD_HEADER = [
+    "Utilization Type", "State", "Year", "Quarter", "Suppression Used",
+    "Product Name", "Units Reimbursed", "Number of Prescriptions",
+    "Total Amount Reimbursed", "NDC",
+]
+
+# Class dispensed volume: stable through 2025, collapsing in 2026Q2
+# (-30% vs 2025Q2) — the fingerprint of patients unable to fill.
+_SDUD_MEMBERS = [
+    "00378464226", "65162014908", "65162099308",
+    "00781714483", "70710119308", "66758014783",
+]
+
+_SDUD_QUARTERS: list[tuple[int, int, float]] = [
+    (2025, 1, 1.00), (2025, 2, 1.00), (2025, 3, 1.02), (2025, 4, 0.98),
+    (2026, 1, 0.90), (2026, 2, 0.70),
+]
+
+_SDUD_BASE_UNITS_PER_STATE = 40000.0
+
+
+def sdud_csv() -> str:
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\r\n")
+    writer.writerow(SDUD_HEADER)
+    for ndc11 in _SDUD_MEMBERS:
+        for year, quarter, factor in _SDUD_QUARTERS:
+            for state in ("CA", "TX"):
+                units = _SDUD_BASE_UNITS_PER_STATE * factor
+                writer.writerow(
+                    ["FFSU", state, year, quarter, "false",
+                     "ESTRADIOL PATCH", f"{units:.1f}", f"{units / 8:.0f}",
+                     f"{units * 7.9:.2f}", ndc11]
+                )
+    # A privacy-suppressed row (blank measures) — must be skipped.
+    writer.writerow(
+        ["FFSU", "WY", 2026, 2, "true", "ESTRADIOL PATCH", "", "", "",
+         "00378464226"]
+    )
+    # A malformed NDC — must be skipped.
+    writer.writerow(
+        ["FFSU", "CA", 2026, 2, "false", "JUNK", "10", "1", "10.0", "notandc"]
+    )
+    return buffer.getvalue()
+
+
+# ------------------------------------------------------------- enforcement
+
+ENFORCEMENT_JSON = """{
+  "results": [
+    {
+      "classification": "Class II",
+      "status": "Ongoing",
+      "recall_initiation_date": "20260305",
+      "product_description": "Estradiol Transdermal System 0.05 mg/day, 8 count carton",
+      "reason_for_recall": "Out of specification result for drug release",
+      "openfda": {"product_ndc": ["0378-4642"]}
+    },
+    {
+      "classification": "Class III",
+      "status": "Terminated",
+      "recall_initiation_date": "20240110",
+      "product_description": "Omeprazole Delayed Release Tablets 20 mg",
+      "reason_for_recall": "Label mix-up",
+      "openfda": {"product_ndc": ["43598-115"]}
+    },
+    {
+      "classification": "Class II",
+      "status": "Ongoing",
+      "recall_initiation_date": "20260601",
+      "product_description": "Assorted compounded products; no NDC assigned",
+      "reason_for_recall": "Lack of sterility assurance"
+    }
+  ]
+}
+"""
+
+
 # ---------------------------------------------------------------- shortages
 
 SHORTAGES_JSON = """{
@@ -679,6 +759,9 @@ def main() -> None:
     (FULL / "nadac_2026.csv").write_bytes(
         nadac_csv(_NADAC_2026_SERIES, _SNAPSHOTS_2026).encode("utf-8")
     )
+
+    (FULL / "sdud_2026.csv").write_bytes(sdud_csv().encode("utf-8"))
+    (FULL / "enforcement.json").write_bytes(ENFORCEMENT_JSON.encode("utf-8"))
 
     (FULL / "shortages.json").write_bytes(SHORTAGES_JSON.encode("utf-8"))
     (HERE / "shortages_synthetic_estradiol.json").write_bytes(

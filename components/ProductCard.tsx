@@ -50,7 +50,12 @@ export function ProductCard({
             shortage: {entry.shortage_statuses.join(", ")}
           </span>
         ) : (
-          <span className="badge ok">no known shortage record</span>
+          <span
+            className="badge"
+            title="FDA's shortage list is manufacturer-self-reported and lagging — real-world backorders often appear late or never. Absence is not availability."
+          >
+            not on FDA shortage list
+          </span>
         )}
         {stress > 0 ? (
           <span className={`badge ${stress >= 0.5 ? "danger" : "warn"}`}>

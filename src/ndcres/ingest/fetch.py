@@ -152,10 +152,56 @@ def fetch_shortages(data_dir: Path) -> "SourceFiles":
     )
 
 
-def discover_nadac_datasets() -> list[dict[str, Any]]:
-    """All NADAC yearly datasets from the metastore, newest first.
+ENFORCEMENT_DOWNLOAD_INDEX = "https://api.fda.gov/download.json"
+
+
+def fetch_enforcement(data_dir: Path) -> "SourceFiles":
+    """openFDA drug enforcement (recalls) via the bulk export index."""
+    from . import SourceFiles
+
+    request = urllib.request.Request(
+        ENFORCEMENT_DOWNLOAD_INDEX, headers={"User-Agent": _USER_AGENT}
+    )
+    with urllib.request.urlopen(request, context=_ssl_context()) as response:  # noqa: S310
+        index = json.load(response)
+    partitions = (
+        index.get("results", {})
+        .get("drug", {})
+        .get("enforcement", {})
+        .get("partitions", [])
+    )
+    if not partitions:
+        raise RuntimeError("openFDA download index lists no enforcement partitions")
+
+    merged: list[Any] = []
+    sha = None
+    for number, partition in enumerate(partitions):
+        url = partition["file"]
+        zip_path = data_dir / f"drug-enforcement-{number}.json.zip"
+        sha = _download(url, zip_path)
+        with zipfile.ZipFile(zip_path) as archive:
+            for name in archive.namelist():
+                if name.endswith(".json"):
+                    payload = json.loads(archive.read(name))
+                    merged.extend(payload.get("results", []))
+    combined = data_dir / "enforcement.json"
+    combined.write_text(json.dumps({"results": merged}), encoding="utf-8")
+    return SourceFiles(
+        paths={"json": combined},
+        source_url=ENFORCEMENT_DOWNLOAD_INDEX,
+        file_sha256=sha,
+        dataset_vintage=str(index.get("results", {}).get("drug", {}).get(
+            "enforcement", {}
+        ).get("export_date")),
+    )
+
+
+def _discover_medicaid_datasets(title_prefix: str) -> list[dict[str, Any]]:
+    """Metastore datasets whose title starts with the prefix, newest first.
 
     Returns dicts with 'title', 'identifier', 'modified', 'downloadURL'.
+    (The downloadURL rotates weekly with a date-stamped filename — it must
+    be re-discovered on every fetch, never hardcoded.)
     """
     request = urllib.request.Request(
         MEDICAID_METASTORE_URL, headers={"User-Agent": _USER_AGENT}
@@ -167,7 +213,7 @@ def discover_nadac_datasets() -> list[dict[str, Any]]:
     found: list[dict[str, Any]] = []
     for item in items:
         title = item.get("title", "")
-        if not title.startswith("NADAC (National Average Drug Acquisition Cost)"):
+        if not title.startswith(title_prefix):
             continue
         distributions = item.get("distribution") or []
         url = None
@@ -189,18 +235,29 @@ def discover_nadac_datasets() -> list[dict[str, Any]]:
     return found
 
 
-def fetch_nadac(data_dir: Path, *, years: int = 2) -> "SourceFiles":
-    """Fetch the newest `years` NADAC yearly CSVs (cross-year drift needs 2)."""
+def discover_nadac_datasets() -> list[dict[str, Any]]:
+    return _discover_medicaid_datasets(
+        "NADAC (National Average Drug Acquisition Cost)"
+    )
+
+
+def _fetch_medicaid_years(
+    data_dir: Path, *, title_prefix: str, stem: str, years: int
+) -> "SourceFiles":
     from . import SourceFiles
 
-    datasets = discover_nadac_datasets()
-    if not datasets:
-        raise RuntimeError("NADAC dataset discovery returned nothing")
-    chosen = datasets[:years]
+    datasets = _discover_medicaid_datasets(title_prefix)
+    # Exclude non-yearly variants (e.g. "State Drug Utilization Data —
+    # RESTATED", NADAC comparison files): yearly titles end with a year.
+    yearly = [d for d in datasets if str(d["title"]).rstrip()[-4:].isdigit()]
+    if not yearly:
+        raise RuntimeError(f"{title_prefix!r} dataset discovery returned nothing")
+    yearly.sort(key=lambda d: str(d["title"])[-4:], reverse=True)
+    chosen = yearly[:years]
     paths: dict[str, Path] = {}
     vintages: list[str] = []
     for index, dataset in enumerate(chosen):
-        dest = data_dir / f"nadac_{index}.csv"
+        dest = data_dir / f"{stem}_{index}.csv"
         _download(str(dataset["downloadURL"]), dest)
         paths[f"csv{index}"] = dest
         vintages.append(f"{dataset['title']} (modified {dataset['modified']})")
@@ -208,4 +265,29 @@ def fetch_nadac(data_dir: Path, *, years: int = 2) -> "SourceFiles":
         paths=paths,
         source_url="; ".join(str(d["downloadURL"]) for d in chosen),
         dataset_vintage="; ".join(vintages),
+    )
+
+
+def fetch_nadac(data_dir: Path, *, years: int = 2) -> "SourceFiles":
+    """Fetch the newest `years` NADAC yearly CSVs (cross-year drift needs 2)."""
+    return _fetch_medicaid_years(
+        data_dir,
+        title_prefix="NADAC (National Average Drug Acquisition Cost)",
+        stem="nadac",
+        years=years,
+    )
+
+
+def fetch_sdud(data_dir: Path, *, years: int = 3) -> "SourceFiles":
+    """Fetch the newest `years` State Drug Utilization yearly CSVs.
+
+    Three years: SDUD publishes quarters with a lag, and the volume-trend
+    signal compares year-over-year quarters, so two complete prior years
+    plus the partial current year is the useful window.
+    """
+    return _fetch_medicaid_years(
+        data_dir,
+        title_prefix="State Drug Utilization Data",
+        stem="sdud",
+        years=years,
     )

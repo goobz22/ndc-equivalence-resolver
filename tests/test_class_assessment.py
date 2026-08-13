@@ -101,6 +101,32 @@ class TestAssessment:
         # seed + the four fixture T1 members.
         assert assessment.member_count == 5
 
+    def test_demand_surge_is_a_constraint_fingerprint(
+        self, fresh_conn: sqlite3.Connection
+    ) -> None:
+        # The 2026 estradiol reality: volume UP 76% YoY (demand surge)
+        # with price drift — a strain fingerprint, worded as such.
+        from conftest import FULL
+
+        from ndcres.ingest import refresh
+
+        refresh(fresh_conn, from_dir=FULL)
+        with fresh_conn:
+            run_id = fresh_conn.execute(
+                "SELECT max(run_id) AS r FROM source_run"
+            ).fetchone()["r"]
+            for (year, quarter, units) in [(2025, 2, 10000.0), (2026, 2, 18000.0)]:
+                fresh_conn.execute(
+                    "INSERT OR REPLACE INTO sdud "
+                    "(ndc11, year, quarter, units, prescriptions, state_rows, run_id) "
+                    "VALUES ('00555088602', ?, ?, ?, 0, 1, ?)",
+                    (year, quarter, units, run_id),
+                )
+        assessment = class_supply_assessment(fresh_conn, ("00555088602",))
+        assert assessment.volume_change_pct == pytest.approx(0.80)
+        joined = " ".join(assessment.lines)
+        assert "demand surge" in joined
+
     def test_web_payload_carries_the_assessment(
         self, loaded_conn: sqlite3.Connection
     ) -> None:

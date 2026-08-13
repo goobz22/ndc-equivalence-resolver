@@ -30,10 +30,27 @@ export interface AnnotatedEntry {
   stress_evidence: string[];
 }
 
+export interface ClassAssessment {
+  member_count: number;
+  surveyed_count: number;
+  fda_listed_members: number;
+  drift_pct: number | null;
+  drift_fired: boolean;
+  dropout_members: number;
+  dropout_ratio: number | null;
+  volume_change_pct: number | null;
+  volume_quarter: string | null;
+  recalls: number;
+  verdict: string;
+  verdict_language: string;
+  lines: string[];
+}
+
 export interface Resolution {
   seed: AnnotatedEntry | null;
   seed_status: string;
   notes: string[];
+  class_assessment: ClassAssessment | null;
   tiers: Record<"T1" | "T2" | "T3" | "T4", AnnotatedEntry[]>;
   tier_language: Record<string, string>;
   excluded: AnnotatedEntry[];

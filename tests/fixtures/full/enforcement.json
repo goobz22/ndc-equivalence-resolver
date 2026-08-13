@@ -1,0 +1,27 @@
+{
+  "results": [
+    {
+      "classification": "Class II",
+      "status": "Ongoing",
+      "recall_initiation_date": "20260305",
+      "product_description": "Estradiol Transdermal System 0.05 mg/day, 8 count carton",
+      "reason_for_recall": "Out of specification result for drug release",
+      "openfda": {"product_ndc": ["0378-4642"]}
+    },
+    {
+      "classification": "Class III",
+      "status": "Terminated",
+      "recall_initiation_date": "20240110",
+      "product_description": "Omeprazole Delayed Release Tablets 20 mg",
+      "reason_for_recall": "Label mix-up",
+      "openfda": {"product_ndc": ["43598-115"]}
+    },
+    {
+      "classification": "Class II",
+      "status": "Ongoing",
+      "recall_initiation_date": "20260601",
+      "product_description": "Assorted compounded products; no NDC assigned",
+      "reason_for_recall": "Lack of sterility assurance"
+    }
+  ]
+}

@@ -16,16 +16,18 @@ from typing import Callable
 
 from .. import link
 from ..db import clear_mirror_tables, finish_run, start_run
-from . import nadac, ndc_directory, orangebook, rxnorm, shortage
+from . import enforcement, nadac, ndc_directory, orangebook, rxnorm, sdud, shortage
 from .fetch import (
+    fetch_enforcement,
     fetch_nadac,
     fetch_ndc_directory,
     fetch_orange_book,
     fetch_rxnorm_prescribable,
+    fetch_sdud,
     fetch_shortages,
 )
 
-SOURCES = ("ndc", "orangebook", "rxnorm", "nadac", "shortage")
+SOURCES = ("ndc", "orangebook", "rxnorm", "nadac", "shortage", "sdud", "enforcement")
 
 # Sources whose rows feed product_ob_link.
 _LINK_INPUTS = {"ndc", "orangebook"}
@@ -51,6 +53,7 @@ _FROM_DIR_LAYOUT: dict[str, dict[str, str]] = {
         "sat": "RXNSAT.RRF",
     },
     "shortage": {"json": "shortages.json"},
+    "enforcement": {"json": "enforcement.json"},
 }
 
 
@@ -59,10 +62,10 @@ def _now() -> str:
 
 
 def _from_dir_files(source: str, from_dir: Path) -> SourceFiles:
-    if source == "nadac":
-        csvs = sorted(from_dir.glob("nadac*.csv"))
+    if source in ("nadac", "sdud"):
+        csvs = sorted(from_dir.glob(f"{source}*.csv"))
         if not csvs:
-            raise FileNotFoundError(f"no nadac*.csv files under {from_dir}")
+            raise FileNotFoundError(f"no {source}*.csv files under {from_dir}")
         return SourceFiles(
             paths={f"csv{i}": p for i, p in enumerate(csvs)},
             source_url=f"file://{from_dir}",
@@ -84,6 +87,8 @@ def _fetch_files(source: str, data_dir: Path) -> SourceFiles:
         "rxnorm": fetch_rxnorm_prescribable,
         "nadac": fetch_nadac,
         "shortage": fetch_shortages,
+        "sdud": fetch_sdud,
+        "enforcement": fetch_enforcement,
     }
     return fetchers[source](data_dir)
 
@@ -147,6 +152,10 @@ def _ingest_one(conn: sqlite3.Connection, source: str, files: SourceFiles) -> in
             count = nadac.ingest(conn, run_id, tuple(files.paths.values()))
         elif source == "shortage":
             count = shortage.ingest(conn, run_id, files.paths["json"])
+        elif source == "sdud":
+            count = sdud.ingest(conn, run_id, tuple(files.paths.values()))
+        elif source == "enforcement":
+            count = enforcement.ingest(conn, run_id, files.paths["json"])
         else:  # pragma: no cover - guarded by SOURCES check
             raise AssertionError(source)
         finish_run(conn, run_id, row_count=count)

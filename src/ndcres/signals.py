@@ -362,6 +362,10 @@ VERDICT_LANGUAGE = {
 _CLASS_DROPOUT_WEEKS = 8.0
 _CLASS_DROPOUT_RATIO_FIRE = 0.25
 _VOLUME_DECLINE_FIRE = -0.15
+# A demand surge strains supply just as a volume collapse evidences it:
+# either direction of large movement is a constraint fingerprint when it
+# accompanies price drift (2026 estradiol patches: +76% YoY volume).
+_VOLUME_SURGE_FIRE = 0.25
 _RECALL_WINDOW_DAYS = 730
 
 
@@ -469,11 +473,22 @@ def class_supply_assessment(
             )
             if prior is not None and prior["units"]:
                 volume_change = (latest["units"] - prior["units"]) / prior["units"]
+                if volume_change <= _VOLUME_DECLINE_FIRE:
+                    reading = (
+                        "falling volume with rising price is the fingerprint "
+                        "of patients unable to fill"
+                    )
+                elif volume_change >= _VOLUME_SURGE_FIRE:
+                    reading = (
+                        "a demand surge of this size strains manufacturing "
+                        "capacity - the classic setup for backorders"
+                    )
+                else:
+                    reading = "volume roughly stable"
                 lines.append(
                     f"national Medicaid dispensed volume for the class: "
                     f"{volume_change:+.1%} in {volume_quarter} vs the same "
-                    "quarter a year earlier (falling volume with rising "
-                    "price is the fingerprint of patients unable to fill)"
+                    f"quarter a year earlier ({reading})"
                 )
 
     # Recalls against class members, measured against the dataset horizon
@@ -512,7 +527,11 @@ def class_supply_assessment(
             dropout_ratio is not None
             and surveyed >= 3
             and dropout_ratio >= _CLASS_DROPOUT_RATIO_FIRE,
-            volume_change is not None and volume_change <= _VOLUME_DECLINE_FIRE,
+            volume_change is not None
+            and (
+                volume_change <= _VOLUME_DECLINE_FIRE
+                or volume_change >= _VOLUME_SURGE_FIRE
+            ),
             recalls > 0,
         )
     )

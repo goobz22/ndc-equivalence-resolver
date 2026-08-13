@@ -57,7 +57,10 @@ def build_parser() -> argparse.ArgumentParser:
     refresh.add_argument(
         "--source",
         action="append",
-        choices=["all", "ndc", "orangebook", "rxnorm", "nadac", "shortage"],
+        choices=[
+            "all", "ndc", "orangebook", "rxnorm", "nadac", "shortage",
+            "sdud", "enforcement",
+        ],
         help="source(s) to refresh (default: all)",
     )
     refresh.add_argument(
@@ -224,6 +227,14 @@ def _print_resolution(resolution: Resolution) -> None:
                 print(f"        - {evidence}")
     for note in resolution.notes:
         print(f"      note: {note}")
+
+    assessment = resolution.class_assessment
+    if assessment is not None:
+        print()
+        print(f"SUPPLY PICTURE for this drug's equivalence class ({assessment.member_count} products):")
+        print(f"  >> {assessment.verdict_language}")
+        for line in assessment.lines:
+            print(f"     - {line}")
     print()
 
     for tier in ("T1", "T2", "T3", "T4"):
