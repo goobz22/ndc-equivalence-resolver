@@ -75,6 +75,34 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="where downloads land (default ~/.ndcres/raw)",
     )
+    refresh.add_argument(
+        "--nadac-years",
+        type=int,
+        default=2,
+        help="how many yearly NADAC datasets to ingest (default 2; "
+        "the backtest wants ~8 — files exist back to 2013)",
+    )
+    refresh.add_argument(
+        "--sdud-years",
+        type=int,
+        default=3,
+        help="how many yearly SDUD datasets to ingest (default 3)",
+    )
+
+    backtest_cmd = subparsers.add_parser(
+        "backtest",
+        help="measure the signals against FDA's own listing history",
+    )
+    backtest_cmd.add_argument(
+        "action", choices=["fetch-history", "lead-times"]
+    )
+    backtest_cmd.add_argument(
+        "--limit", type=int, default=None, help="fetch-history: cap snapshots"
+    )
+    backtest_cmd.add_argument(
+        "--since", default="2020-01-01", help="lead-times: earliest posting"
+    )
+    backtest_cmd.add_argument("--json", action="store_true", dest="as_json")
 
     resolve_cmd = subparsers.add_parser(
         "resolve", help="ranked substitutable alternatives for an NDC"
@@ -187,6 +215,8 @@ def cmd_refresh(
     source_args: list[str] | None,
     from_dir: Path | None,
     data_dir: Path | None,
+    nadac_years: int = 2,
+    sdud_years: int = 3,
 ) -> int:
     from .ingest import SOURCES, refresh
 
@@ -195,7 +225,14 @@ def cmd_refresh(
         wanted = tuple(dict.fromkeys(source_args))
     conn = connect(db_path)
     try:
-        counts = refresh(conn, sources=wanted, from_dir=from_dir, data_dir=data_dir)
+        counts = refresh(
+            conn,
+            sources=wanted,
+            from_dir=from_dir,
+            data_dir=data_dir,
+            nadac_years=nadac_years,
+            sdud_years=sdud_years,
+        )
     except Exception as error:  # surface, don't stack-trace, for CLI use
         print(f"refresh failed: {error}", file=sys.stderr)
         raise SystemExit(1) from error
@@ -477,6 +514,55 @@ def cmd_sweep(
     return 0
 
 
+def cmd_backtest(
+    db_path: Path | None,
+    action: str,
+    limit: int | None,
+    since: str,
+    as_json: bool,
+) -> int:
+    conn = connect(db_path)
+    if action == "fetch-history":
+        from .backtest import fetch_wayback_history
+
+        stored = fetch_wayback_history(conn, limit=limit)
+        total = sum(stored.values())
+        print(
+            f"fetched {len(stored)} wayback capture(s); "
+            f"{total} new fda_list_history row(s)"
+        )
+        return 0
+    from .backtest import lead_time_report
+
+    report = lead_time_report(conn, since=since)
+    if as_json:
+        print(json.dumps(report, indent=2))
+        return 0
+    print(
+        f"lead-time backtest since {report['since']}: "
+        f"{report['listings_total']} listed drugs, "
+        f"{report['listings_mapped']} mapped to TE-rated classes "
+        f"({report['listings_unmapped']} unmapped by name)"
+    )
+    if report["listings_mapped"]:
+        rate = report["concordance_rate"] or 0.0
+        print(
+            f"  concordant at posting (>=2 independent axes firing): "
+            f"{report['concordant_at_posting']} ({rate:.0%})"
+        )
+        print(
+            f"  early (fired before the posting): {report['early']} — "
+            f"median lead {report['lead_days_median']} days "
+            f"(p25 {report['lead_days_p25']}, p75 {report['lead_days_p75']}, "
+            f"max {report['lead_days_max']}; "
+            f"{report['step_days']}-day steps, "
+            f"{report['max_lookback_days']}-day lookback)"
+        )
+    print()
+    print(_DISCLAIMER)
+    return 0
+
+
 def cmd_gaps(db_path: Path | None, as_json: bool, limit: int) -> int:
     from .gaps import GapError, gap_report
     from .provenance import source_refs
@@ -632,7 +718,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "normalize":
         return cmd_normalize(args.ndc)
     if args.command == "refresh":
-        return cmd_refresh(args.db, args.source, args.from_dir, args.data_dir)
+        return cmd_refresh(
+            args.db, args.source, args.from_dir, args.data_dir,
+            args.nadac_years, args.sdud_years,
+        )
     if args.command == "resolve":
         return cmd_resolve(args.db, args.ndc, args.as_json)
     if args.command == "explain":
@@ -647,6 +736,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return cmd_dossier(args.db, args.ndc, args.as_json, args.md, args.exhibits)
     if args.command == "gaps":
         return cmd_gaps(args.db, args.as_json, args.limit)
+    if args.command == "backtest":
+        return cmd_backtest(args.db, args.action, args.limit, args.since, args.as_json)
     if args.command == "search":
         return cmd_search(args.db, args.query, args.limit, args.as_json)
     if args.command == "export":

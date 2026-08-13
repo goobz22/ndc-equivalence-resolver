@@ -362,15 +362,34 @@ history, provenance refs), two renderers:
   suppression, re-review triggers named (threshold changes; >50% top-10
   composition shift week-over-week).
 
-## 13. Backtest methodology — lands with Phase 7
+## 13. Backtest methodology (`src/ndcres/backtest/`, Phase 7 — landed)
 
-Contract summary: FDA-list history reconstructed via the ASPE-validated Wayback
-method + our own forward snapshots; lead time = first FDA listing minus earliest
-≥2-fingerprint date computed from data preceding it; reports median/IQR lead
-time, concordance, and the **unconfirmed-positive rate** (the FDA list is not
-ground truth — that is the finding); NADAC/SDUD deepened via
-`refresh --nadac-years/--sdud-years`; thresholds are documented constants, never
-auto-tuned against the lagging reference.
+- **History source** (`wayback.py`): the legacy `Drugshortages.cfm` endpoint
+  served the whole list as CSV; the Internet Archive holds ~45 captures
+  (2019-10 → present), discovered via the CDX API and parsed with the pinned
+  22-column legacy header (drift raises). Each capture lands in
+  `fda_list_history` (`snapshot_source='wayback-cfm'`), including FDA's own
+  per-row **Initial Posting Date** — so first-listing dates come from FDA's
+  own field, not snapshot-diffing (a deliberate improvement over the plan's
+  interval table, which is therefore not needed; intervals derive from
+  `min(initial_posting)` per normalized name).
+- **Replay** (`leadtime.py`): a listed name maps to TE-rated classes
+  conservatively (every ingredient part must appear in the name); the four
+  evidence axes replay using ONLY rows whose dataset-internal dates precede a
+  cutoff. Thresholds are IMPORTED from signals.py — one home, never retuned
+  here (tuning against the lagging reference under indictment is circular).
+  Documented approximation: replayed NADAC carries effective-date fidelity,
+  not the weekly as-of observations, so the dropout axis is proxied by a
+  stall in rate-change cadence (≥8 weeks).
+- **Metrics**: concordance-at-posting (≥2 axes firing when FDA first posted)
+  and lead time (28-day steps back, ≤364-day lookback, lead = deepest step
+  still firing). The unconfirmed-positive side is the SWEEP's unlisted-
+  constraint count — unconfirmed, never "false": the list is not ground
+  truth; that is the finding, and estradiol is the worked example.
+- Depth: `refresh --nadac-years N --sdud-years N` (yearly datasets exist
+  credential-free to 2013/1991). CLI: `ndcres backtest fetch-history` /
+  `ndcres backtest lead-times [--since] [--json]`. Batch-only — never in the
+  serving path. Results: docs/VALIDATION.md.
 
 ## 14. Web API contracts
 
@@ -516,6 +535,11 @@ the reason and owner. The crosswalk test fails on any dangling reference.
 | INV-12.2 | The partition is clean: unlisted ⇒ constraint verdict + zero FDA members; listed_but_quiet ⊆ fda_listed with zero fingerprints | tests/test_gaps.py::test_partition_is_clean |
 | INV-12.3 | Gap ranking is deterministic and evidence-ordered; counts match the run summary | tests/test_gaps.py::test_ranking_is_deterministic_and_ordered ; tests/test_gaps.py::test_counts_match_the_run_summary |
 | INV-12.4 | A class moves lists when FDA lists it; no sweep yields a loud, helpful error; the payload carries provenance | tests/test_gaps.py::test_fda_listed_class_moves_lists_when_listed ; tests/test_gaps.py::test_no_sweep_is_a_loud_error ; tests/test_gaps.py::test_payload_carries_provenance |
+| INV-13.1 | The legacy CSV parser handles the real archived shape and fails loudly on header drift, empty snapshots; malformed dates become None | tests/test_backtest.py::test_parses_the_real_shape ; tests/test_backtest.py::test_header_drift_fails_loudly ; tests/test_backtest.py::test_empty_snapshot_fails_loudly ; tests/test_backtest.py::test_malformed_dates_become_none ; tests/test_backtest.py::test_expected_columns_are_the_pinned_legacy_set |
+| INV-13.2 | Wayback snapshots store dedup-safely with normalized names | tests/test_backtest.py::test_store_dedupes_on_the_pk |
+| INV-13.3 | Name→class mapping is conservative (estradiol maps to its 3+ classes incl. the anchor; unknown names map nowhere) | tests/test_backtest.py::test_estradiol_name_maps_to_te_rated_classes ; tests/test_backtest.py::test_unknown_name_maps_nowhere |
+| INV-13.4 | The replay never leaks post-cutoff data (quiet before data exists; fires at the horizon; empty members = 0) | tests/test_backtest.py::test_fires_at_the_fixture_horizon ; tests/test_backtest.py::test_quiet_before_the_data_exists ; tests/test_backtest.py::test_empty_members_zero |
+| INV-13.5 | The lead-time report counts unmapped listings honestly and finds the planted early-firing case | tests/test_backtest.py::test_report_over_planted_history |
 | INV-14.1 | Web and CLI serve identical JSON (one serializer, JSON-native types, zero drift) | tests/test_web.py::test_web_json_matches_cli_json |
 | INV-14.2 | /api/resolve returns the corrected tiers; unknown NDC → 404 with detail | tests/test_web.py::test_anchor_resolves_with_corrected_tiers ; tests/test_web.py::test_unknown_ndc_is_404_with_detail |
 | INV-14.3 | /api/explain carries the Lyllana prescriber-authorization verdict; /api/signal carries components; /api/meta reports vintages | tests/test_web.py::test_lyllana_verdict ; tests/test_web.py::test_signal_components ; tests/test_web.py::test_vintages_reported |

@@ -60,17 +60,20 @@ def ingest(conn: sqlite3.Connection, run_id: int, csv_paths: Sequence[Path]) -> 
         with path.open(encoding="utf-8-sig", newline="") as handle:
             reader = csv.reader(handle)
             header = next(reader, None)
-            # CMS renamed the columns between vintages: yearly files
-            # before 2024 use underscores (NADAC_Per_Unit), later ones
-            # spaces — same columns, same order (verified against the
-            # 2018-2026 datasets). Both spellings are ACCEPTED
-            # explicitly; anything else still refuses.
+            # CMS respelled the columns across vintages — spaces
+            # ("NADAC Per Unit", 2024+), Title_Case underscores
+            # (2021-2023), and lowercase snake_case (2019-2020) — same
+            # columns, same order every time (verified against the
+            # 2018-2026 yearly datasets). All three spellings are
+            # ACCEPTED explicitly by case/underscore normalization; a
+            # different column set or order still refuses.
             normalized = (
-                [column.replace("_", " ") for column in header]
+                [column.replace("_", " ").strip().lower() for column in header]
                 if header is not None
                 else None
             )
-            if normalized != _EXPECTED_HEADER:
+            expected_normalized = [column.lower() for column in _EXPECTED_HEADER]
+            if normalized != expected_normalized:
                 raise ValueError(
                     f"{path.name}: header drifted from the verified NADAC layout; "
                     "refusing to guess column positions"

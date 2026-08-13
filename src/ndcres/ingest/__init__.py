@@ -83,14 +83,25 @@ def _from_dir_files(source: str, from_dir: Path) -> SourceFiles:
     return SourceFiles(paths=paths, source_url=f"file://{from_dir}")
 
 
-def _fetch_files(source: str, data_dir: Path) -> SourceFiles:
+def _fetch_files(
+    source: str,
+    data_dir: Path,
+    *,
+    nadac_years: int = 2,
+    sdud_years: int = 3,
+) -> SourceFiles:
+    # NADAC/SDUD depth is configurable for the backtest (per-year datasets
+    # exist credential-free back to 2013 / 1991); everything else has a
+    # single current artifact.
+    if source == "nadac":
+        return fetch_nadac(data_dir, years=nadac_years)
+    if source == "sdud":
+        return fetch_sdud(data_dir, years=sdud_years)
     fetchers: dict[str, Callable[[Path], SourceFiles]] = {
         "ndc": fetch_ndc_directory,
         "orangebook": fetch_orange_book,
         "rxnorm": fetch_rxnorm_prescribable,
-        "nadac": fetch_nadac,
         "shortage": fetch_shortages,
-        "sdud": fetch_sdud,
         "enforcement": fetch_enforcement,
     }
     return fetchers[source](data_dir)
@@ -102,6 +113,8 @@ def refresh(
     sources: tuple[str, ...] | None = None,
     from_dir: Path | None = None,
     data_dir: Path | None = None,
+    nadac_years: int = 2,
+    sdud_years: int = 3,
 ) -> dict[str, int]:
     """Fetch (or read from_dir) and ingest the requested sources.
 
@@ -121,7 +134,12 @@ def refresh(
             files = _from_dir_files(source, from_dir)
         else:
             resolved_data_dir = data_dir or (Path.home() / ".ndcres" / "raw")
-            files = _fetch_files(source, resolved_data_dir)
+            files = _fetch_files(
+                source,
+                resolved_data_dir,
+                nadac_years=nadac_years,
+                sdud_years=sdud_years,
+            )
         counts[source] = _ingest_one(conn, source, files)
 
     if _LINK_INPUTS & set(counts):

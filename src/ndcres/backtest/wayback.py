@@ -86,11 +86,15 @@ def looks_like_legacy_csv(text: str) -> bool:
 
 
 def parse_legacy_csv(text: str) -> list[LegacyRow]:
-    reader = csv.reader(io.StringIO(text))
-    try:
-        header = [column.strip() for column in next(reader)]
-    except StopIteration as error:
-        raise RuntimeError("legacy CSV snapshot is empty") from error
+    reader = csv.reader(io.StringIO(text.lstrip("﻿")))
+    header: list[str] = []
+    for record in reader:
+        candidate = [column.strip() for column in record]
+        if any(candidate):  # captures may open with blank lines
+            header = candidate
+            break
+    if not header:
+        raise RuntimeError("legacy CSV snapshot is empty")
     missing = [column for column in EXPECTED_COLUMNS if column not in header]
     if missing:
         raise RuntimeError(
@@ -204,7 +208,13 @@ def fetch_wayback_history(
         if not looks_like_legacy_csv(text):
             skipped.append(timestamp)
         else:
-            rows = parse_legacy_csv(text)
+            try:
+                rows = parse_legacy_csv(text)
+            except RuntimeError as error:
+                raise RuntimeError(
+                    f"capture {timestamp}: {error} — first bytes: "
+                    f"{text[:200]!r}"
+                ) from error
             stored[timestamp] = store_snapshot(conn, timestamp, rows)
         if position + 1 < len(timestamps):
             time.sleep(pause_seconds)

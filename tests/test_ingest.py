@@ -377,6 +377,36 @@ class TestNadacLegacyHeader:
         ).fetchone()
         assert row["effective_date"] == "2020-12-23"
 
+    def test_snake_case_vintage_header_accepted(self, tmp_path: Path) -> None:
+        # 2019-2020 yearly files: quoted lowercase snake_case (a third
+        # verified spelling of the same columns).
+        from ndcres.db import connect, start_run
+        from ndcres.ingest import nadac
+
+        legacy = tmp_path / "nadac_snake.csv"
+        legacy.write_text(
+            '"ndc_description","ndc","nadac_per_unit","effective_date",'
+            '"pricing_unit","pharmacy_type_indicator","otc",'
+            '"explanation_code","classification_for_rate_setting",'
+            '"corresponding_generic_drug_nadac_per_unit",'
+            '"corresponding_generic_drug_effective_date","as_of_date"\n'
+            '"CICLOPIROX 0.77% GEL","47781053084","0.92528","12/18/2019",'
+            '"GM","C/I","N","1, 5, 6","G",,,"01/01/2020"\n',
+            encoding="utf-8",
+        )
+        conn = connect(tmp_path / "t.db")
+        with conn:
+            run_id = start_run(
+                conn, source="nadac", source_url="file://test",
+                fetched_at="2026-08-13T00:00:00Z",
+            )
+            count = nadac.ingest(conn, run_id, (legacy,))
+        assert count == 1
+        row = conn.execute(
+            "SELECT effective_date FROM nadac WHERE ndc11='47781053084'"
+        ).fetchone()
+        assert row["effective_date"] == "2019-12-18"
+
     def test_truly_drifted_header_still_refuses(self, tmp_path: Path) -> None:
         from ndcres.db import connect, start_run
         from ndcres.ingest import nadac
