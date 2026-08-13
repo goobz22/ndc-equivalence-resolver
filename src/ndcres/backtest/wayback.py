@@ -74,6 +74,17 @@ def _iso_from_mdy(text: str) -> str | None:
     return f"{year}-{int(month):02d}-{int(day):02d}"
 
 
+def looks_like_legacy_csv(text: str) -> bool:
+    """Some captures are HTML error pages or empty redirects, not the
+    CSV — those are SKIPPED (counted, reported), while a real CSV whose
+    header drifted still raises (that is drift, not noise)."""
+    head = text.lstrip()[:2000]
+    if not head or head.startswith("<"):
+        return False
+    first_line = head.splitlines()[0]
+    return "Generic Name" in first_line and "," in first_line
+
+
 def parse_legacy_csv(text: str) -> list[LegacyRow]:
     reader = csv.reader(io.StringIO(text))
     try:
@@ -185,12 +196,22 @@ def fetch_wayback_history(
     if limit is not None:
         timestamps = timestamps[:limit]
     stored: dict[str, int] = {}
+    skipped: list[str] = []
     for position, timestamp in enumerate(timestamps):
         text = _get(SNAPSHOT_URL.format(timestamp=timestamp)).decode(
             "utf-8", errors="replace"
         )
-        rows = parse_legacy_csv(text)
-        stored[timestamp] = store_snapshot(conn, timestamp, rows)
+        if not looks_like_legacy_csv(text):
+            skipped.append(timestamp)
+        else:
+            rows = parse_legacy_csv(text)
+            stored[timestamp] = store_snapshot(conn, timestamp, rows)
         if position + 1 < len(timestamps):
             time.sleep(pause_seconds)
+    if skipped:
+        print(
+            f"skipped {len(skipped)} non-CSV capture(s): "
+            + ", ".join(skipped[:8])
+            + ("..." if len(skipped) > 8 else "")
+        )
     return stored
