@@ -20,12 +20,19 @@ and prescriber.
 
 **Live:** consumer UI at
 [ndc-equivalence-resolver.vercel.app](https://ndc-equivalence-resolver.vercel.app)
-· JSON API at
-[ndcres-api.vercel.app](https://ndcres-api.vercel.app/api/resolve/0378-4642-26)
+— including [**/gaps**](https://ndc-equivalence-resolver.vercel.app/gaps), the
+weekly market-wide gap between the FDA shortage list and the public evidence
+(latest sweep: **377 drug classes show the constraint pattern with no FDA
+listing; the list covers 179**), and the per-class
+[evidence dossier](https://ndc-equivalence-resolver.vercel.app/dossier/0378-4642-26).
+JSON API at [ndcres-api.vercel.app](https://ndcres-api.vercel.app/api/resolve/0378-4642-26)
 (`/api/resolve/{ndc}`, `/api/explain/{a}/{b}`, `/api/signal/{ndc}`,
-`/api/search?q=`, `/api/meta`) — both refreshed weekly from the sources by
-[CI](.github/workflows/data-refresh.yml); deployment architecture in
-[docs/DEPLOY_NOTES.md](docs/DEPLOY_NOTES.md).
+`/api/search?q=`, `/api/gaps`, `/api/dossier/{ndc}`, `/api/meta`) — refreshed
+weekly by [CI](.github/workflows/data-refresh.yml), which also accumulates the
+listing history FDA itself deletes (`ndcres-history.db` on the data release).
+Backtested: the independent signals fired a **median 112 days before FDA's own
+first listings** ([docs/VALIDATION.md](docs/VALIDATION.md)). Deployment
+architecture in [docs/DEPLOY_NOTES.md](docs/DEPLOY_NOTES.md).
 
 ## The problem, concretely
 
