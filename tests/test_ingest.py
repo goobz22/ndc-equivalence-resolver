@@ -1,6 +1,7 @@
 """Ingest + link-builder tests against the byte-exact fixture slices."""
 
 import sqlite3
+from pathlib import Path
 
 from conftest import FULL, NDC_V2
 

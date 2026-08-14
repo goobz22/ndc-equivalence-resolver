@@ -12,7 +12,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - name: Sync dependencies
-        run: uv sync --group dev
+        # --all-extras: mypy and the web tests need fastapi/httpx/
+        # truststore (optional extras). Python pinned to 3.12 — the
+        # Vercel serving runtime — so CI catches 3.12-compat breaks
+        # that newer local interpreters mask (e.g. lazy annotations).
+        run: uv sync --python 3.12 --group dev --all-extras
       - name: Run offline test suite
         run: uv run pytest -q
       - name: Type-check
