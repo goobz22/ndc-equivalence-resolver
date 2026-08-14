@@ -22,14 +22,22 @@ from ndcres.signals import (
     VERDICT_MIXED,
     VERDICT_QUIET,
 )
-from ndcres.sweep import enumerate_classes, latest_sweep_id, persist_sweep, run_sweep
+from ndcres.sweep import (
+    SweepClassRow,
+    enumerate_classes,
+    latest_sweep_id,
+    persist_sweep,
+    run_sweep,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "full"
 
 ESTRADIOL_KEY = ("ESTRADIOL", "SYSTEM;TRANSDERMAL")
 
 
-def _estradiol_anchor_class(result_classes):  # type: ignore[no-untyped-def]
+def _estradiol_anchor_class(
+    result_classes: tuple[SweepClassRow, ...],
+) -> SweepClassRow:
     for row in result_classes:
         if (
             row.ingredient_set == "ESTRADIOL"

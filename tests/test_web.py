@@ -1,5 +1,6 @@
 """Web API tests — the FastAPI layer must mirror the CLI exactly."""
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -37,7 +38,7 @@ class TestResolveEndpoint:
         assert "unknown" in response.json()["detail"]
 
     def test_web_json_matches_cli_json(
-        self, client: TestClient, loaded_conn  # type: ignore[no-untyped-def]
+        self, client: TestClient, loaded_conn: sqlite3.Connection
     ) -> None:
         from ndcres.provenance import source_refs
         from ndcres.resolve import resolve

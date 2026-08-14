@@ -13,6 +13,7 @@ import pytest
 
 from ndcres.resolve import (
     Dims,
+    Resolution,
     ResolveError,
     assign_tier,
     compute_dimensions,
@@ -21,11 +22,11 @@ from ndcres.resolve import (
 )
 
 
-def _tier_ndcs(resolution, tier: str) -> set[str]:  # type: ignore[no-untyped-def]
+def _tier_ndcs(resolution: Resolution, tier: str) -> set[str]:
     return {a.dims.ndc11 for a in resolution.tiers[tier]}
 
 
-def _reasons_for(resolution, tier: str, ndc11: str) -> tuple[str, ...]:  # type: ignore[no-untyped-def]
+def _reasons_for(resolution: Resolution, tier: str, ndc11: str) -> tuple[str, ...]:
     for annotated in resolution.tiers[tier]:
         if annotated.dims.ndc11 == ndc11:
             return annotated.result.reasons
@@ -33,12 +34,12 @@ def _reasons_for(resolution, tier: str, ndc11: str) -> tuple[str, ...]:  # type:
 
 
 @pytest.fixture(scope="module")
-def anchor_resolution(loaded_conn: sqlite3.Connection):  # type: ignore[no-untyped-def]
+def anchor_resolution(loaded_conn: sqlite3.Connection) -> Resolution:
     return resolve(loaded_conn, "0378-4642-26")
 
 
 @pytest.fixture(scope="module")
-def lyllana_resolution(loaded_conn: sqlite3.Connection):  # type: ignore[no-untyped-def]
+def lyllana_resolution(loaded_conn: sqlite3.Connection) -> Resolution:
     return resolve(loaded_conn, "65162-149-08")
 
 
@@ -46,17 +47,17 @@ class TestAnchorGolden:
     """resolve 0378-4642-26 — the motivating real-world case."""
 
     @pytest.fixture()
-    def resolution(self, anchor_resolution):  # type: ignore[no-untyped-def]
+    def resolution(self, anchor_resolution: Resolution) -> Resolution:
         return anchor_resolution
 
-    def test_seed_identity(self, resolution) -> None:  # type: ignore[no-untyped-def]
+    def test_seed_identity(self, resolution: Resolution) -> None:
         assert resolution.seed.ndc11 == "00378464226"
         assert resolution.seed.te_code == "AB1"
         assert resolution.seed.schedule == "2/wk"
         assert resolution.seed.pack_count == 8
         assert resolution.seed_status == "package"
 
-    def test_tier1_is_exactly_the_ab1_eight_counts(self, resolution) -> None:  # type: ignore[no-untyped-def]
+    def test_tier1_is_exactly_the_ab1_eight_counts(self, resolution: Resolution) -> None:
         assert _tier_ndcs(resolution, "T1") == {
             "65162099308",  # DOTTI — Amneal, AB1
             "70710119308",  # Zydus, AB1
@@ -64,12 +65,12 @@ class TestAnchorGolden:
             "66758014783",  # Vivelle-Dot brand, AB1 RLD
         }
 
-    def test_lyllana_is_tier3_different_subgroup(self, resolution) -> None:  # type: ignore[no-untyped-def]
+    def test_lyllana_is_tier3_different_subgroup(self, resolution: Resolution) -> None:
         assert "65162014908" in _tier_ndcs(resolution, "T3")
         reasons = _reasons_for(resolution, "T3", "65162014908")
         assert reasons == ("different-te-subgroup",)
 
-    def test_mylan_own_ab3_product_is_tier3(self, resolution) -> None:  # type: ignore[no-untyped-def]
+    def test_mylan_own_ab3_product_is_tier3(self, resolution: Resolution) -> None:
         # Same labeler, same strength, same schedule, same pack count —
         # AB3 vs AB1 → still not interchangeable.
         assert "00378462126" in _tier_ndcs(resolution, "T3")
@@ -77,51 +78,51 @@ class TestAnchorGolden:
             "different-te-subgroup",
         )
 
-    def test_climara_group_is_tier3_schedule_change(self, resolution) -> None:  # type: ignore[no-untyped-def]
+    def test_climara_group_is_tier3_schedule_change(self, resolution: Resolution) -> None:
         for ndc11 in ("50419045104", "00378335099", "68382032604", "00781713354"):
             reasons = _reasons_for(resolution, "T3", ndc11)
             assert "different-te-subgroup" in reasons
             assert "different-schedule" in reasons
 
-    def test_menostar_is_tier3_multi_reason(self, resolution) -> None:  # type: ignore[no-untyped-def]
+    def test_menostar_is_tier3_multi_reason(self, resolution: Resolution) -> None:
         reasons = _reasons_for(resolution, "T3", "50419045504")
         assert "different-te-subgroup" in reasons
         assert "different-schedule" in reasons
         assert "different-strength" in reasons
 
-    def test_minivelle_is_tier3_not_tier1(self, resolution) -> None:  # type: ignore[no-untyped-def]
+    def test_minivelle_is_tier3_not_tier1(self, resolution: Resolution) -> None:
         assert "68968665008" in _tier_ndcs(resolution, "T3")
 
-    def test_tier4_gel_spray_oral(self, resolution) -> None:  # type: ignore[no-untyped-def]
+    def test_tier4_gel_spray_oral(self, resolution: Resolution) -> None:
         t4 = _tier_ndcs(resolution, "T4")
         assert {"68025006507", "68025006530", "00574206727", "00555088602",
                 "00555088604", "21922001540"} <= t4
         for annotated in resolution.tiers["T4"]:
             assert annotated.result.reasons == ("different-form-family",)
 
-    def test_combo_product_never_gathered(self, resolution) -> None:  # type: ignore[no-untyped-def]
+    def test_combo_product_never_gathered(self, resolution: Resolution) -> None:
         everything = set().union(
             *(_tier_ndcs(resolution, t) for t in ("T1", "T2", "T3", "T4")),
             {a.dims.ndc11 for a in resolution.excluded},
         )
         assert "50419049104" not in everything  # Climara Pro (combo)
 
-    def test_sample_package_excluded(self, resolution) -> None:  # type: ignore[no-untyped-def]
+    def test_sample_package_excluded(self, resolution: Resolution) -> None:
         excluded = {a.dims.ndc11: a.result.reasons for a in resolution.excluded}
         assert excluded.get("00574206700") == ("sample-package",)
 
-    def test_alora_surfaces_as_excluded_via_rxnorm(self, resolution) -> None:  # type: ignore[no-untyped-def]
+    def test_alora_surfaces_as_excluded_via_rxnorm(self, resolution: Resolution) -> None:
         excluded = {a.dims.ndc11: a.result.reasons for a in resolution.excluded}
         assert excluded.get("52544047108") == ("not-in-current-ndc-directory",)
 
-    def test_partition_no_candidate_in_two_tiers(self, resolution) -> None:  # type: ignore[no-untyped-def]
+    def test_partition_no_candidate_in_two_tiers(self, resolution: Resolution) -> None:
         buckets = [
             _tier_ndcs(resolution, t) for t in ("T1", "T2", "T3", "T4")
         ] + [{a.dims.ndc11 for a in resolution.excluded}]
         total = sum(len(b) for b in buckets)
         assert len(set().union(*buckets)) == total
 
-    def test_seed_never_its_own_candidate(self, resolution) -> None:  # type: ignore[no-untyped-def]
+    def test_seed_never_its_own_candidate(self, resolution: Resolution) -> None:
         everything = set().union(
             *(_tier_ndcs(resolution, t) for t in ("T1", "T2", "T3", "T4")),
             {a.dims.ndc11 for a in resolution.excluded},
@@ -133,16 +134,16 @@ class TestSymmetryGolden:
     """resolve 65162-149-08 (Lyllana as seed) — no seed-privileging."""
 
     @pytest.fixture()
-    def resolution(self, lyllana_resolution):  # type: ignore[no-untyped-def]
+    def resolution(self, lyllana_resolution: Resolution) -> Resolution:
         return lyllana_resolution
 
-    def test_tier1_is_the_ab3_group(self, resolution) -> None:  # type: ignore[no-untyped-def]
+    def test_tier1_is_the_ab3_group(self, resolution: Resolution) -> None:
         assert _tier_ndcs(resolution, "T1") == {
             "68968665008",  # Minivelle brand, AB3 RLD
             "00378462126",  # Mylan ANDA206685, AB3
         }
 
-    def test_original_anchor_lands_in_tier3(self, resolution) -> None:  # type: ignore[no-untyped-def]
+    def test_original_anchor_lands_in_tier3(self, resolution: Resolution) -> None:
         assert _reasons_for(resolution, "T3", "00378464226") == (
             "different-te-subgroup",
         )
@@ -226,7 +227,7 @@ class TestProperties:
     def test_resolution_is_deterministic(
         self, loaded_conn: sqlite3.Connection
     ) -> None:
-        def snapshot():  # type: ignore[no-untyped-def]
+        def snapshot() -> dict[str, list[tuple[str | None, tuple[str, ...]]]]:
             resolution = resolve(loaded_conn, "0378-4642-26")
             return {
                 tier: [(a.dims.ndc11, a.result.reasons) for a in members]

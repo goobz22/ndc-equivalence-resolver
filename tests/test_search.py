@@ -131,9 +131,12 @@ class TestRankingAndShape:
         # match, marketed flag decides.
         from ndcres.search import _score
 
-        class FakeRow(dict):  # sqlite3.Row quacks like a mapping
-            def __getitem__(self, key: str) -> object:  # type: ignore[override]
-                return dict.__getitem__(self, key)
+        class FakeRow:  # sqlite3.Row quacks like a mapping
+            def __init__(self, data: dict[str, object]) -> None:
+                self._data = data
+
+            def __getitem__(self, key: str) -> object:
+                return self._data[key]
 
         base = {
             "proprietary_name": "Dotti",
