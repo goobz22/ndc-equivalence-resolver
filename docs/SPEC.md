@@ -193,12 +193,33 @@ Every finding carries citable evidence detail.
 
 ### 7.2 Class supply assessment (triangulation over the legal class)
 - Members = seed + T1 + T2 (the legal substitution class), deduped.
-- Fingerprints (independent evidence axes): class drift ≥ +10% · dropout ratio
-  ≥ 0.25 with surveyed ≥ 3 · SDUD volume decline ≤ −15% OR surge ≥ +25% ·
-  recalls within 730 days.
-- Verdict ladder: any active FDA record → `fda-listed-shortage`; ≥2 fingerprints →
+  `class_supply_assessment(conn, members, *, class_key=None)` — the key enables
+  the directory-exit axis; sweep, resolve, and dossier all pass it (one
+  engine).
+- **Five fingerprint axes** (`FINGERPRINT_AXES = 5`, serialized so no display
+  surface ever hardcodes the count):
+  1. class price drift ≥ +10%;
+  2. survey dropout ratio ≥ 0.25 with surveyed ≥ 3 — **scoped to
+     still-marketed members**: formally end-marketed members are
+     DISCONTINUATION, counted separately as `discontinued_members` and
+     excluded from BOTH the numerator and the denominator (in the numerator
+     they fake strain; in the denominator they dilute the ratio for exactly
+     the classes where discontinuation is heaviest);
+  3. SDUD volume decline ≤ −15% OR surge ≥ +25%;
+  4. recalls within 730 days;
+  5. **directory-exit** (the fast witness, §10.3): members that vanished from
+     the weekly NDC directory while still RX-active and NOT end-marketed at
+     last sight, within the trailing 12 weeks; fires at ≥2 (conservative v1,
+     re-reviewed after four live snapshots). GUARD: without a class key or
+     with fewer than two membership snapshots the axis is `None` — reported
+     as "accumulating", and it can never fire or count.
+- Per-axis fired flags (`drift_fired`, `dropout_fired`, `volume_fired`,
+  `directory_exit_fired`) ship in the payload — display surfaces never
+  re-implement thresholds.
+- Verdict ladder (unchanged meaning — "two independent corroborating
+  signals"): any active FDA record → `fda-listed-shortage`; ≥2 fingerprints →
   `evidence-consistent-with-supply-constraint`; exactly 1 → `mixed-signals`;
-  else → `no-independent-stress-evidence` (which reads "quiet", never "available").
+  else → `no-independent-stress-evidence` (reads "quiet", never "available").
 - Verdict language lives ONLY in `VERDICT_LANGUAGE` (single home).
 
 ## 8. Search engine (`src/ndcres/search.py`)
@@ -622,9 +643,13 @@ the reason and owner. The crosswalk test fails on any dangling reference.
 | INV-14.4 | /api/search finds by brand and by NDC fragment (Phase 1 re-pins with the structured engine) | tests/test_web.py::test_search_by_brand ; tests/test_web.py::test_search_by_ndc_fragment |
 | INV-14.5 | Class assessment reaches the web payload | tests/test_class_assessment.py::test_web_payload_carries_the_assessment |
 | INV-16.1 | The serving artifact is rollback-journal (not WAL) and opens read-only/immutable; the read-only path blocks writes and fails loudly on a missing file | tests/test_export.py::test_artifact_is_rollback_journal_not_wal ; tests/test_export.py::test_readonly_open_serves_rows ; tests/test_export.py::test_immutable_open_serves_rows ; tests/test_export.py::test_readonly_blocks_writes ; tests/test_export.py::test_missing_database_fails_loudly |
-| INV-16.2 | Export size gate refuses oversized artifacts | ⚠️ OPEN — gate logic lives in export.py:183-189 and fires in CI, but no unit test plants an oversized input; owner: Phase 6 (export changes) adds a gate test |
+| INV-16.2 | Export size gate refuses oversized artifacts and removes the oversized file | tests/test_export.py::test_size_gate_refuses_oversized_artifact |
 | INV-18.1 | Explain: every dimension line cites a source; TE dimension shows the group; special-cased data names its correction | tests/test_explain.py::test_every_dimension_line_cites_a_source ; tests/test_explain.py::test_te_dimension_shows_the_group ; tests/test_explain.py::test_te_source_mentions_the_special_case |
 | INV-18.2 | Explain verdicts: Dotti = direct substitute; Lyllana = requires prescriber, TE the only differing dimension | tests/test_explain.py::test_verdict_is_direct_substitute ; tests/test_explain.py::test_verdict_requires_prescriber ; tests/test_explain.py::test_te_dimension_differs_while_everything_else_matches |
+| INV-7.7 | End-marketed members count as discontinued, leaving both dropout terms; still-marketed dropouts keep counting | tests/test_class_assessment.py::test_end_marketed_dropout_counts_as_discontinued_not_dropout ; tests/test_class_assessment.py::test_still_marketed_dropout_still_fires |
+| INV-7.8 | Directory-exit fires only on silent RX-active exits (planted); end-marketed vanishes never fire; without two snapshots the axis is None, reads "accumulating", and never counts toward fingerprints; the payload carries the axis count | tests/test_class_assessment.py::test_fires_on_planted_silent_exits ; tests/test_class_assessment.py::test_end_marketed_vanish_never_fires ; tests/test_class_assessment.py::test_none_without_two_snapshots_and_never_counts ; tests/test_class_assessment.py::test_payload_carries_axis_count |
+| INV-10.11 | Pre-5-axis archives gain the new sweep_class columns via the additive shim, with historical rows honestly NULL | tests/test_history.py::test_old_archive_gains_columns_via_shim |
+| INV-16.3 | The membership window ships in the web export so the serving path computes the same directory-exit axis | tests/test_export.py::test_membership_tables_ship |
 | INV-9.1 | Every ingest source and every derived table has a registry identity; refs merge live run state (url + fetched_at present after ingest) | tests/test_provenance.py::test_every_ingest_source_has_identity ; tests/test_provenance.py::test_derived_tables_have_identity_too ; tests/test_provenance.py::test_refs_merge_live_run_state |
 | INV-9.2 | Orange Book / RxNav deep links build correctly and refuse garbage | tests/test_provenance.py::test_anda_deep_link ; tests/test_provenance.py::test_nda_deep_link_pads_to_six ; tests/test_provenance.py::test_rxnav_link ; tests/test_provenance.py::test_garbage_and_none_yield_none |
 | INV-9.3 | Every payload (resolution/explanation/signal/search) carries a complete sources map — and the walker itself fails on stripped provenance (planted defect) | tests/test_provenance.py::test_resolution_payload ; tests/test_provenance.py::test_explanation_payload ; tests/test_provenance.py::test_signal_payload ; tests/test_provenance.py::test_search_payload ; tests/test_provenance.py::test_the_walker_actually_fails_on_stripped_provenance |
