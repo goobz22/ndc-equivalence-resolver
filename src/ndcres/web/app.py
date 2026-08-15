@@ -257,8 +257,68 @@ def api_statelaw() -> dict[str, Any]:
     return statelaw_payload()
 
 
+@app.get("/api/pharmacies")
+async def api_pharmacies(
+    zip: str = Query(pattern=r"^\d{5}$"),
+) -> Any:
+    from fastapi.concurrency import run_in_threadpool
+    from fastapi.responses import JSONResponse
+
+    from .pharmacies import UpstreamError, find_pharmacies
+
+    try:
+        payload = await run_in_threadpool(find_pharmacies, zip)
+    except UpstreamError as error:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": str(error)},
+            headers={"Retry-After": "60"},
+        )
+    return JSONResponse(
+        content=payload,
+        # The 24h CDN cache IS the rate-limit posture: one upstream
+        # query (+1 widen) per ZIP per day, not per visitor.
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+@app.get("/api/costplus/{ndc}")
+async def api_costplus(ndc: str) -> Any:
+    from fastapi.concurrency import run_in_threadpool
+    from fastapi.responses import JSONResponse
+
+    from ..ndc import normalize_ndc11
+    from .costplus import CostplusError, costplus_enabled, price_for_ndc
+
+    if not costplus_enabled():
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Cost Plus lookup is not enabled on this deployment "
+                "(operator-gated; see SPEC section 14)"
+            ),
+        )
+    try:
+        ndc11 = normalize_ndc11(ndc)
+    except NdcError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    try:
+        payload = await run_in_threadpool(price_for_ndc, ndc11)
+    except CostplusError as error:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": str(error)},
+            headers={"Retry-After": "60"},
+        )
+    return JSONResponse(
+        content=payload, headers={"Cache-Control": "public, max-age=86400"}
+    )
+
+
 @app.get("/api/meta")
 def api_meta(conn: sqlite3.Connection = Depends(get_conn)) -> dict[str, Any]:
+    from .costplus import costplus_enabled
+
     rows = conn.execute(
         """
         SELECT source, max(fetched_at) AS fetched_at, dataset_vintage,
@@ -279,5 +339,11 @@ def api_meta(conn: sqlite3.Connection = Depends(get_conn)) -> dict[str, Any]:
         # Full identity + latest-run state per source — the /sources page
         # and per-block SourceTags render from this (SPEC §9).
         "registry": source_refs(conn),
+        # Truthful feature flags (T11 discipline: never advertise what
+        # is off; never silently ship what is undeclared).
+        "features": {
+            "pharmacy_locator": True,
+            "costplus": costplus_enabled(),
+        },
         "disclaimer": DISCLAIMER,
     }
