@@ -501,6 +501,10 @@ test). Serializers emit JSON-native types only (no tuples).
 | `GET /api/gaps?limit=` | gap report (§12) |
 | `GET /api/classes` | canonical class index: slug + key + rep + verdict per latest-sweep class (feeds the sitemap) |
 | `GET /api/class/{slug}` | one class + its full resolution via the representative package; helpful 404 for unknown/stale slugs |
+| `GET /api/feeds/gaps.xml`, `/api/feeds/class/{slug}.xml` | RSS watch feeds (§10.4) |
+| `GET /api/statelaw` | curated state substitution-law table (§20; no DB dependency) |
+| `GET /api/pharmacies?zip=` | NPI-Registry pharmacy list for a 5-digit ZIP (LOCATION addresses, retail-first, one widen); 422 non-ZIP, 503+Retry-After on upstream failure, 24h CDN cache (the rate-limit posture); ZIP never stored or logged (§17) |
+| `GET /api/costplus/{ndc}` | OPERATOR-GATED (`NDCRES_COSTPLUS=1`, default OFF): Cost Plus public price matches for an NDC; 404 "not enabled" otherwise. Enablement checklist: operator reads costplusdrugs.com ToS in a real browser + live-checks the endpoint, then sets the env var — never an agent decision |
 
 Errors: unknown/unresolvable NDC → 404 with a helpful detail message; a missing
 database is a broken deploy → 500 that says so. Input spellings: all accepted NDC
@@ -562,8 +566,15 @@ serves only incoming browser requests from the remaining client islands.
 ## 17. Non-goals & exclusions (each is a decision, not an accident)
 
 - **No live pharmacy inventory**; no scraping of CVS/Walgreens/McKesson/Cardinal/
-  Cencora properties (ToS + CFAA exposure).
-- **No PHI, ever.** No accounts, no tracking.
+  Cencora properties (ToS + CFAA exposure). The pharmacy locator (§14) uses
+  ONLY the CMS NPI Registry (FOIA-mandated public data, 72 FR 30011) and says
+  in-payload that a registration is never a stock claim.
+- **No PHI, ever.** No accounts, no tracking. The locator ZIP is used for the
+  single upstream registry query and is never stored, logged, or joined; the
+  note page's `?state=` choice lives only in the URL. Cost Plus lookup ships
+  DISABLED (`NDCRES_COSTPLUS=1` is an operator decision after a human ToS
+  read + live check — never an agent's inference); `/api/meta.features`
+  reports the real state.
 - **No clinical recommendations** — prescriber-authorization framing only.
 - **No credential-gated sources** (that excludes: Canada HPS API, UK SPS tool,
   ASHP as a feed — ASHP terms forbid reuse; EMA catalogue skipped as thin).
@@ -714,6 +725,9 @@ the reason and owner. The crosswalk test fails on any dangling reference.
 | INV-10.12 | A planted verdict flip produces a transition item with a stable guid and a dataset-relative date; no change yields no items; a single sweep yields a VALID empty channel; rendered output is byte-deterministic; hostile names survive escaping | tests/test_feeds.py::test_planted_flip_produces_transition_item ; tests/test_feeds.py::test_no_change_no_items ; tests/test_feeds.py::test_single_sweep_yields_valid_empty_channel ; tests/test_feeds.py::test_deterministic_bytes ; tests/test_feeds.py::test_escaping_survives_hostile_names |
 | INV-10.13 | The class feed carries verdict-change + current-state items newest-first and misses cleanly on unknown slugs; the export window keeps 13 sweeps and drops the oldest beyond it | tests/test_feeds.py::test_history_carries_change_and_current ; tests/test_feeds.py::test_unknown_slug_returns_none ; tests/test_feeds.py::test_oldest_sweep_excluded_beyond_13 ; tests/test_export.py::test_export_ships_sweeps_within_the_window |
 | INV-14.9 | The feed endpoints serve parseable RSS with the right media type and cache header; the class feed 404s on unknown slugs and leads with the current-state item | tests/test_web.py::test_gaps_feed_serves_parseable_rss ; tests/test_web.py::test_class_feed_404s_on_unknown_slug ; tests/test_web.py::test_class_feed_serves_current_state |
+| INV-14.10 | Locator results are retail-first, LOCATION-address-only (mailing-only registrations dropped, never misdirected), and widen exactly once on zero results with the widened flag surfaced | tests/test_pharmacies.py::test_retail_sorts_first ; tests/test_pharmacies.py::test_location_address_only_never_mailing ; tests/test_pharmacies.py::test_record_without_location_address_is_dropped ; tests/test_pharmacies.py::test_zero_results_widens_exactly_once |
+| INV-14.11 | The locator endpoint 422s on non-ZIP input, 503s with Retry-After on upstream failure, day-caches success, and carries attribution + the registration-not-stock note; Cost Plus 404s while disabled, serves via the documented endpoint when enabled, and /api/meta.features never advertises what is off | tests/test_pharmacies.py::test_invalid_zip_422 ; tests/test_pharmacies.py::test_upstream_failure_503_with_retry_after ; tests/test_pharmacies.py::test_success_carries_day_cache ; tests/test_pharmacies.py::test_payload_carries_attribution_and_honesty ; tests/test_pharmacies.py::test_costplus_disabled_404s ; tests/test_pharmacies.py::test_costplus_enabled_serves_via_fetcher ; tests/test_pharmacies.py::test_meta_features_truthful |
+| INV-17.1 | Upstream errors surface as UpstreamError (never a silent empty result) | tests/test_pharmacies.py::test_upstream_error_propagates |
 | INV-20.1 | All 51 jurisdictions present exactly once; every row format-valid (enum, https statute URL, ISO as_of, non-empty override + citation); unverified rows are the bounded exception | tests/test_statelaw.py::test_all_51_jurisdictions_present_exactly_once ; tests/test_statelaw.py::test_row_format ; tests/test_statelaw.py::test_unverified_rows_are_the_exception |
 | INV-20.2 | Statute-verified goldens hold (FL mandatory + MEDICALLY NECESSARY + may-refuse; NY §6810 daw box; MA mandatory; CT cited) | tests/test_statelaw.py::test_florida_mandatory_with_medically_necessary ; tests/test_statelaw.py::test_new_york_daw_box ; tests/test_statelaw.py::test_massachusetts_mandatory ; tests/test_statelaw.py::test_connecticut_rule_present_and_cited |
 | INV-20.3 | The statelaw payload carries the not-legal-advice disclaimer and the full field set; lookup normalizes and misses cleanly | tests/test_statelaw.py::test_payload_shape_and_disclaimer ; tests/test_statelaw.py::test_lookup_normalizes ; tests/test_statelaw.py::test_unknown_returns_none |

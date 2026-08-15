@@ -83,7 +83,7 @@ class TestFindPharmacies:
 
         def fetch(url: str) -> dict[str, Any]:
             calls.append(url)
-            if "750*" in url:
+            if "postal_code=750%2A" in url:  # urlencoded "750*"
                 return {"results": [_record("WIDER")]}
             return {"results": []}
 

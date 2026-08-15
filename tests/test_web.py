@@ -135,6 +135,43 @@ class TestClassEndpoints:
         slugs = [entry["slug"] for entry in payload["classes"]]
         assert len(slugs) == len(set(slugs))
 
+    def test_gaps_feed_serves_parseable_rss(
+        self, swept_client: TestClient
+    ) -> None:
+        import xml.etree.ElementTree as ET
+
+        response = swept_client.get("/api/feeds/gaps.xml")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith(
+            "application/rss+xml"
+        )
+        assert "max-age=3600" in response.headers["cache-control"]
+        parsed = ET.fromstring(response.content)
+        assert parsed.tag == "rss"
+
+    def test_class_feed_404s_on_unknown_slug(
+        self, swept_client: TestClient
+    ) -> None:
+        response = swept_client.get("/api/feeds/class/nonsense-00000000.xml")
+        assert response.status_code == 404
+
+    def test_class_feed_serves_current_state(
+        self, swept_client: TestClient
+    ) -> None:
+        import xml.etree.ElementTree as ET
+
+        from ndcres.classpage import class_slug
+
+        slug = class_slug("ESTRADIOL", "SYSTEM;TRANSDERMAL", "UG24H:50", "AB1")
+        response = swept_client.get(f"/api/feeds/class/{slug}.xml")
+        assert response.status_code == 200
+        parsed = ET.fromstring(response.content)
+        items = parsed.findall("channel/item")
+        assert len(items) >= 1
+        guid = items[0].find("guid")
+        assert guid is not None and guid.text is not None
+        assert guid.text.endswith(":current")
+
     def test_resolution_carries_class_ref(
         self, swept_client: TestClient
     ) -> None:

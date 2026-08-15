@@ -235,4 +235,4 @@ def render_rss(
         guid.text = item.guid
         ET.SubElement(element, "pubDate").text = item.pub_date
         ET.SubElement(element, "description").text = item.description
-    return ET.tostring(rss, encoding="utf-8", xml_declaration=True)
+    return bytes(ET.tostring(rss, encoding="utf-8", xml_declaration=True))

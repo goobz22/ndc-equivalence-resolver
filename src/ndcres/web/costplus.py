@@ -36,12 +36,14 @@ class CostplusError(RuntimeError):
 
 
 def _default_fetcher(url: str) -> Any:
+    from ..ingest.fetch import _ssl_context  # OS-native verify (§ ingest)
+
     request = urllib.request.Request(
         url, headers={"accept": "application/json"}
     )
     try:
         with urllib.request.urlopen(  # noqa: S310 — fixed https host
-            request, timeout=_TIMEOUT_SECONDS
+            request, timeout=_TIMEOUT_SECONDS, context=_ssl_context()
         ) as response:
             return json.loads(response.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, ValueError) as error:

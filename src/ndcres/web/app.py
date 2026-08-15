@@ -287,7 +287,7 @@ async def api_costplus(ndc: str) -> Any:
     from fastapi.concurrency import run_in_threadpool
     from fastapi.responses import JSONResponse
 
-    from ..ndc import normalize_ndc11
+    from ..ndc import parse_ndc
     from .costplus import CostplusError, costplus_enabled, price_for_ndc
 
     if not costplus_enabled():
@@ -299,7 +299,7 @@ async def api_costplus(ndc: str) -> Any:
             ),
         )
     try:
-        ndc11 = normalize_ndc11(ndc)
+        ndc11 = parse_ndc(ndc).ndc11  # ambiguous bare-10 raises NdcError
     except NdcError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     try:

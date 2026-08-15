@@ -72,9 +72,12 @@ class TestArtifactReadOnlyContract:
 
 
 class TestSweepInTheExport:
-    def test_export_ships_exactly_the_latest_sweep(
+    def test_export_ships_sweeps_within_the_window(
         self, loaded_db_path: Path, tmp_path: Path
     ) -> None:
+        # The export carries the latest-13-sweeps window (SPEC §10.4) —
+        # with two sweeps, BOTH ship (feeds diff them); the
+        # beyond-window exclusion is pinned in test_feeds.py.
         import shutil
 
         from ndcres.db import connect
@@ -94,13 +97,13 @@ class TestSweepInTheExport:
         web = connect_readonly(dest)
         try:
             runs = web.execute(
-                "SELECT sweep_id FROM sweep_run"
+                "SELECT sweep_id FROM sweep_run ORDER BY sweep_id"
             ).fetchall()
-            assert [row["sweep_id"] for row in runs] == [second]
+            assert [row["sweep_id"] for row in runs] == [first, second]
             classes = web.execute(
                 "SELECT count(DISTINCT sweep_id) FROM sweep_class"
             ).fetchone()[0]
-            assert classes == 1
+            assert classes == 2
         finally:
             web.close()
 

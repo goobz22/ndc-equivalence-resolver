@@ -163,10 +163,11 @@ export default async function GapsPage() {
         <p className="lede">
           Every week this site assesses all{" "}
           {report.sweep.class_count.toLocaleString()} therapeutically-
-          interchangeable drug classes in the US against four independent
+          interchangeable drug classes in the US against five independent
           public signals: acquisition-price spikes, products vanishing from
-          the federal price survey, national dispensed-volume shocks, and
-          recalls. As of {report.sweep.run_date}:{" "}
+          the federal price survey, national dispensed-volume shocks,
+          recalls, and silent exits from the NDC directory. As of{" "}
+          {report.sweep.run_date}:{" "}
           <b>
             {unlistedTotal} classes show independent evidence consistent with
             a supply constraint while appearing nowhere on FDA&apos;s
@@ -174,7 +175,10 @@ export default async function GapsPage() {
           </b>{" "}
           — the list covers {listedTotal}.
         </p>
-        <p className="tier-sub">{report.note}</p>
+        <p className="tier-sub">
+          {report.note}{" "}
+          <a href="/api/feeds/gaps.xml">Watch weekly changes (RSS)</a>
+        </p>
         <SourceTag
           refs={report.sources}
           ids={["shortage", "nadac", "sdud", "enforcement"]}

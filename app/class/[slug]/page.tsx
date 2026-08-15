@@ -70,7 +70,8 @@ export default async function ClassPage({
           One therapeutic-equivalence class: {info.member_count} package
           {info.member_count === 1 ? "" : "s"} across manufacturers, FDA-rated
           interchangeable with each other. The resolution below is seeded from
-          a representative package; every member gets the same class verdict.
+          a representative package; every member gets the same class verdict.{" "}
+          <a href={`/api/feeds/class/${slug}.xml`}>Watch this class (RSS)</a>
         </p>
       </section>
       <ResolutionView

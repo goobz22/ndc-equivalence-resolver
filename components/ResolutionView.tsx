@@ -1,4 +1,5 @@
 import { Resolution, TIER_TITLES, TIER_SUBTITLES } from "@/lib/api";
+import { GetItFilled } from "@/components/GetItFilled";
 import { ProductCard } from "@/components/ProductCard";
 import { SourceTag } from "@/components/SourceTag";
 import { SupplyPicture } from "@/components/SupplyPicture";
@@ -66,6 +67,17 @@ export function ResolutionView({
           </section>
         );
       })}
+
+      {resolution.tiers.T1 && resolution.tiers.T1.length > 0 ? (
+        <GetItFilled
+          alternatives={resolution.tiers.T1.filter(
+            (entry) => entry.ndc_as_filed || entry.ndc11,
+          ).map((entry) => ({
+            ndc: (entry.ndc_as_filed ?? entry.ndc11) as string,
+            name: entry.name,
+          }))}
+        />
+      ) : null}
 
       {resolution.excluded.length > 0 ? (
         <section className="tier-section">

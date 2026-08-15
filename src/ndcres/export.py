@@ -170,17 +170,21 @@ def export_web_db(
                     (horizon,),
                 )
 
-            # Latest sweep only: the serving tier reads the current
-            # market picture (dossier sweep-history line, /api/gaps);
-            # the LONGITUDINAL record lives in ndcres-history.db, never
-            # in the size-gated serving artifact.
+            # Latest 13 sweeps (one quarter of weekly transitions): the
+            # serving tier reads the current market picture (/api/gaps,
+            # dossier) AND renders watch feeds over recent verdict
+            # changes (SPEC §10.4, ~0.8MB/sweep — in the 176MiB gate's
+            # budget math). The FULL longitudinal record lives in
+            # ndcres-history.db, never in the size-gated artifact.
             conn.execute(
                 "INSERT INTO web.sweep_run SELECT * FROM main.sweep_run "
-                "WHERE sweep_id = (SELECT max(sweep_id) FROM main.sweep_run)"
+                "WHERE sweep_id IN (SELECT sweep_id FROM main.sweep_run "
+                "ORDER BY sweep_id DESC LIMIT 13)"
             )
             conn.execute(
                 "INSERT INTO web.sweep_class SELECT * FROM main.sweep_class "
-                "WHERE sweep_id = (SELECT max(sweep_id) FROM main.sweep_run)"
+                "WHERE sweep_id IN (SELECT sweep_id FROM main.sweep_run "
+                "ORDER BY sweep_id DESC LIMIT 13)"
             )
 
             # Directory-membership window (SPEC §10.3): the serving

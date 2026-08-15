@@ -97,8 +97,9 @@ class TestClassFeed:
 
         _resweep_with_flip(swept_conn)
         slug = next(
-            s for s, key in slug_index(swept_conn).items()
-            if key[0] == "ESTRADIOL" and key[3] == "AB1"
+            s for s, entry in slug_index(swept_conn).items()
+            if entry["ingredient_set"] == "ESTRADIOL"
+            and entry["te_code"] == "AB1"
         )
         items = class_history_items(swept_conn, slug)
         assert items is not None

@@ -14,6 +14,13 @@ export const metadata: Metadata = {
   },
   description:
     "When your pharmacy is out of your medication: the same drug from other manufacturers, what a pharmacist can swap directly, and what your prescriber needs to write to unlock the rest. Built entirely from public FDA, NLM, and CMS data.",
+  alternates: {
+    types: {
+      "application/rss+xml": [
+        { url: "/api/feeds/gaps.xml", title: "Gap-report changes" },
+      ],
+    },
+  },
 };
 
 export default function RootLayout({
