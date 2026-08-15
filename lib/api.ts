@@ -133,6 +133,13 @@ export interface SearchResult {
   package_count: number;
 }
 
+export interface CorroborationSource {
+  source: string;
+  url: string;
+  accessed: string;
+  note: string;
+}
+
 export interface GapEntry {
   ingredient_set: string;
   df_route: string;
@@ -152,6 +159,7 @@ export interface GapEntry {
   recalls: number;
   fingerprints: number;
   verdict: string;
+  corroborated_by: CorroborationSource[];
 }
 
 export interface GapReport {

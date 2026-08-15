@@ -36,6 +36,33 @@ function strengthLabel(strengthNorm: string): string {
   return strengthNorm || "?";
 }
 
+const CORROBORATION_LABELS: Record<string, string> = {
+  ashp: "ASHP",
+  "au-tga": "Australia TGA",
+  "ca-hps": "Canada HPS",
+  "uk-dhsc": "UK DHSC/NHS",
+};
+
+function CorroborationBadges({ entry }: { entry: GapEntry }) {
+  if (!entry.corroborated_by || entry.corroborated_by.length === 0) return null;
+  return (
+    <span>
+      {entry.corroborated_by.map((source) => (
+        <a
+          key={source.source}
+          href={source.url}
+          target="_blank"
+          rel="noreferrer"
+          className="badge ok"
+          title={`${source.note} — accessed ${source.accessed}. Externally reported; not part of the verdict.`}
+        >
+          also listed by {CORROBORATION_LABELS[source.source] ?? source.source}
+        </a>
+      ))}
+    </span>
+  );
+}
+
 function FingerprintChips({ entry }: { entry: GapEntry }) {
   return (
     <span>
@@ -106,7 +133,8 @@ function GapTable({
               <td>{entry.te_code}</td>
               <td>{entry.member_count}</td>
               <td>
-                <b>{entry.fingerprints}/4</b> <FingerprintChips entry={entry} />
+                <b>{entry.fingerprints}/4</b> <FingerprintChips entry={entry} />{" "}
+                <CorroborationBadges entry={entry} />
               </td>
             </tr>
           ))}

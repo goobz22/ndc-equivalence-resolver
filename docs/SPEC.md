@@ -390,6 +390,18 @@ history, provenance refs), two renderers:
   the coherent price-up/volume-down constraint pattern), zero ad-hoc row
   suppression, re-review triggers named (threshold changes; >50% top-10
   composition shift week-over-week).
+- **Corroboration & forward precision**: `src/ndcres/corroboration.py` holds
+  curated, dated citations showing a flagged class is ALSO listed by another
+  public shortage regime (ASHP / AU TGA / Canada HPS / UK DHSC) — the output
+  of the recorded precision audit
+  (docs/dossiers/2026-08-gaps-precision-audit.md: 28 of the top 50, a lower
+  bound). CITATION-ONLY, the dossier EXTERNAL_REFERENCES posture: entries
+  never feed a verdict, fingerprint, or ranking (pinned by a planted-defect
+  test); rendered on /gaps as "also listed by {source} · accessed {date}"
+  badges, never "confirmed". Re-verification follows the quality-review
+  triggers, not a wall-clock timer. `gaps.worksheet(conn, N)` /
+  `ndcres gaps --worksheet N` emits the audit worksheet, ordering pinned to
+  the report.
 
 ## 13. Backtest methodology (`src/ndcres/backtest/`, Phase 7 — landed)
 
@@ -602,6 +614,8 @@ the reason and owner. The crosswalk test fails on any dangling reference.
 | INV-14.6 | /api/class/{slug} resolves the anchor class (Dotti in T1) and 404s helpfully on unknown slugs; /api/classes covers every latest-sweep class with unique slugs | tests/test_web.py::test_class_endpoint_resolves_by_slug ; tests/test_web.py::test_unknown_slug_404s_helpfully ; tests/test_web.py::test_classes_index_covers_every_class |
 | INV-14.7 | Class slugs are deterministic, unique across the fixture universe, URL-safe, capped, and punctuation-colliding keys stay distinct (hash suffix) | tests/test_classpage.py::test_deterministic ; tests/test_classpage.py::test_unique_across_fixture_universe ; tests/test_classpage.py::test_url_safe ; tests/test_classpage.py::test_long_keys_capped_but_unique ; tests/test_classpage.py::test_punctuation_only_keys_stay_distinct ; tests/test_classpage.py::test_anchor_class_addressable ; tests/test_classpage.py::test_empty_db_empty_index |
 | INV-14.8 | Resolutions carry class_ref (slug + key) for TE-rated seeds; human_strength labels render canonically with RAW honestly marked | tests/test_web.py::test_resolution_carries_class_ref ; tests/test_classpage.py::test_patch_rate ; tests/test_classpage.py::test_mass_milligrams ; tests/test_classpage.py::test_raw_is_honestly_labeled |
+| INV-12.5 | Corroborations are citation-only: entry shapes validated (source enum, https, ISO dates, no "confirmed" wording); a planted corroboration on every class leaves the gap report byte-identical; the payload carries them | tests/test_corroboration.py::test_entry_shapes ; tests/test_corroboration.py::test_no_duplicate_class_keys ; tests/test_corroboration.py::test_lookup_misses_cleanly ; tests/test_corroboration.py::test_corroboration_never_alters_verdict_or_rank ; tests/test_corroboration.py::test_gap_payload_carries_corroborations |
+| INV-12.6 | The audit worksheet matches the gap report's ordering, is deterministic, and every row is checkable (names, labelers, OB URLs) | tests/test_corroboration.py::test_worksheet_matches_report_ordering ; tests/test_corroboration.py::test_worksheet_is_deterministic ; tests/test_corroboration.py::test_worksheet_rows_are_checkable |
 | INV-14.1 | Web and CLI serve identical JSON (one serializer, JSON-native types, zero drift) | tests/test_web.py::test_web_json_matches_cli_json |
 | INV-14.2 | /api/resolve returns the corrected tiers; unknown NDC → 404 with detail | tests/test_web.py::test_anchor_resolves_with_corrected_tiers ; tests/test_web.py::test_unknown_ndc_is_404_with_detail |
 | INV-14.3 | /api/explain carries the Lyllana prescriber-authorization verdict; /api/signal carries components; /api/meta reports vintages | tests/test_web.py::test_lyllana_verdict ; tests/test_web.py::test_signal_components ; tests/test_web.py::test_vintages_reported |

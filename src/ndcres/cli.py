@@ -176,6 +176,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gaps_cmd.add_argument("--json", action="store_true", dest="as_json")
     gaps_cmd.add_argument("--limit", type=int, default=25)
+    gaps_cmd.add_argument(
+        "--worksheet",
+        type=int,
+        default=None,
+        metavar="N",
+        help="emit the precision-audit worksheet for the top N "
+        "unlisted-constraint classes (JSON)",
+    )
 
     dossier_cmd = subparsers.add_parser(
         "dossier",
@@ -579,12 +587,25 @@ def cmd_backtest(
     return 0
 
 
-def cmd_gaps(db_path: Path | None, as_json: bool, limit: int) -> int:
-    from .gaps import GapError, gap_report
+def cmd_gaps(
+    db_path: Path | None,
+    as_json: bool,
+    limit: int,
+    worksheet_n: int | None = None,
+) -> int:
+    from .gaps import GapError, gap_report, worksheet
     from .provenance import source_refs
     from .serialize import gap_report_dict
 
     conn = connect(db_path)
+    if worksheet_n is not None:
+        try:
+            rows = worksheet(conn, worksheet_n)
+        except GapError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 2
+        print(json.dumps(rows, indent=2))
+        return 0
     try:
         report = gap_report(conn)
     except GapError as error:
@@ -785,7 +806,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "dossier":
         return cmd_dossier(args.db, args.ndc, args.as_json, args.md, args.exhibits)
     if args.command == "gaps":
-        return cmd_gaps(args.db, args.as_json, args.limit)
+        return cmd_gaps(args.db, args.as_json, args.limit, args.worksheet)
     if args.command == "backtest":
         return cmd_backtest(args.db, args.action, args.limit, args.since, args.as_json)
     if args.command == "search":

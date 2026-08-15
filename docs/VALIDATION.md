@@ -46,6 +46,20 @@ dispensed-volume shocks, recalls) — independently measures a median
    and independently listed by three mandatory-reporting regimes abroad
    (docs/dossiers/).
 
+## Forward precision (added 2026-08-14)
+
+The backtest above validates BACKWARD (signals vs FDA's own past listings).
+The forward check audits the CURRENT output: of the top 50 unlisted-constraint
+classes in sweep #1, **28 (56%) are independently listed by at least one other
+public shortage regime** (ASHP, or the mandatory-reporting lists of Australia,
+Canada, or the UK) for the same molecule and form — a lower bound, since at
+least 8 of the 17 clean-miss molecules are US-only niche products the foreign
+regimes never carry. Full worksheet, per-class citations, and the misses
+recorded honestly: docs/dossiers/2026-08-gaps-precision-audit.md; the citation
+constants live in src/ndcres/corroboration.py and render on /gaps as
+"also listed by" badges (citation-only — they never feed a verdict; pinned by
+test).
+
 ## Method (SPEC §13; reproduction commands below)
 
 1. Recover FDA's listing history: `ndcres backtest fetch-history`

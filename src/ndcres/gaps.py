@@ -102,6 +102,97 @@ def _rank_key(entry: GapEntry) -> tuple[Any, ...]:
     )
 
 
+def worksheet(
+    conn: sqlite3.Connection, limit: int = 50
+) -> list[dict[str, Any]]:
+    """The precision-audit worksheet: everything a human (or research
+    pass) needs to check one top unlisted-constraint class against
+    independent public shortage listings. Ordering matches the gap
+    report exactly (pinned by test) — the audit's "top N" must be THE
+    top N.
+    """
+    from .classpage import class_slug
+    from .provenance import ob_application_url
+
+    report = gap_report(conn)
+    rows: list[dict[str, Any]] = []
+    for entry in report.unlisted_constraints[:limit]:
+        members = conn.execute(
+            """
+            SELECT DISTINCT p.nonproprietary_name, p.proprietary_name,
+                   p.labeler_name, p.appl_type, p.appl_no
+            FROM ob_product o
+            JOIN product_ob_link l USING (appl_type, appl_no, product_no)
+            JOIN product p ON p.ndc9 = l.ndc9
+            WHERE o.ingredient_set = ? AND o.df_route = ?
+              AND coalesce(o.strength_norm, '') = ? AND o.te_code = ?
+            ORDER BY p.labeler_name
+            """,
+            (
+                entry.ingredient_set,
+                entry.df_route,
+                entry.strength_norm,
+                entry.te_code,
+            ),
+        ).fetchall()
+        rows.append(
+            {
+                "rank": len(rows) + 1,
+                "slug": class_slug(
+                    entry.ingredient_set,
+                    entry.df_route,
+                    entry.strength_norm,
+                    entry.te_code,
+                ),
+                "ingredient_set": entry.ingredient_set,
+                "df_route": entry.df_route,
+                "strength_norm": entry.strength_norm,
+                "te_code": entry.te_code,
+                "rep_ndc11": entry.rep_ndc11,
+                "fingerprints": entry.fingerprints,
+                "member_count": entry.member_count,
+                "surveyed_count": entry.surveyed_count,
+                "drift_pct": entry.drift_pct,
+                "dropout_members": entry.dropout_members,
+                "volume_change_pct": entry.volume_change_pct,
+                "volume_quarter": entry.volume_quarter,
+                "recalls": entry.recalls,
+                "generic_names": sorted(
+                    {
+                        row["nonproprietary_name"]
+                        for row in members
+                        if row["nonproprietary_name"]
+                    }
+                ),
+                "brand_names": sorted(
+                    {
+                        row["proprietary_name"]
+                        for row in members
+                        if row["proprietary_name"]
+                    }
+                ),
+                "labelers": sorted(
+                    {row["labeler_name"] for row in members if row["labeler_name"]}
+                ),
+                "ob_urls": sorted(
+                    {
+                        url
+                        for url in (
+                            ob_application_url(
+                                f"{'ANDA' if row['appl_type'] == 'A' else 'NDA'}"
+                                f"{row['appl_no']}"
+                            )
+                            for row in members
+                            if row["appl_no"]
+                        )
+                        if url
+                    }
+                ),
+            }
+        )
+    return rows
+
+
 def gap_report(
     conn: sqlite3.Connection, sweep_id: int | None = None
 ) -> GapReport:

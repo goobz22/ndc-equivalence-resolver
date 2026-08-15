@@ -98,7 +98,21 @@ def search_results_dict(
 
 
 def gap_entry_dict(entry: GapEntry) -> dict[str, Any]:
-    return dataclasses.asdict(entry)
+    from .corroboration import corroborations_for
+
+    payload = dataclasses.asdict(entry)
+    payload["corroborated_by"] = [
+        dataclasses.asdict(source)
+        for source in corroborations_for(
+            (
+                entry.ingredient_set,
+                entry.df_route,
+                entry.strength_norm,
+                entry.te_code,
+            )
+        )
+    ]
+    return payload
 
 
 def gap_report_dict(
