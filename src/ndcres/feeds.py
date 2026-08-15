@@ -155,9 +155,15 @@ def class_history_items(
     """Verdict-change items for one class; None if the slug is unknown."""
     from .classpage import slug_index
 
-    key = slug_index(conn).get(slug)
-    if key is None:
+    entry = slug_index(conn).get(slug)
+    if entry is None:
         return None
+    key = (
+        entry["ingredient_set"],
+        entry["df_route"],
+        entry["strength_norm"],
+        entry["te_code"],
+    )
     rows = conn.execute(
         """
         SELECT c.*, r.run_date FROM sweep_class c
