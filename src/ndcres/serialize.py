@@ -99,8 +99,10 @@ def search_results_dict(
 
 def gap_entry_dict(entry: GapEntry) -> dict[str, Any]:
     from .corroboration import corroborations_for
+    from .signals import FINGERPRINT_AXES
 
     payload = dataclasses.asdict(entry)
+    payload["fingerprint_axes"] = FINGERPRINT_AXES
     payload["corroborated_by"] = [
         dataclasses.asdict(source)
         for source in corroborations_for(
@@ -195,11 +197,16 @@ def sweep_summary_dict(
 
 
 def class_assessment_dict(assessment: ClassAssessment) -> dict[str, Any]:
+    from .signals import FINGERPRINT_AXES
+
     payload = dataclasses.asdict(assessment)
     # Serializers emit JSON-native types only: asdict preserves tuple
     # fields as tuples, which compare unequal to the lists a JSON
     # round-trip produces (caught by the CLI↔web parity test).
     payload["lines"] = list(payload["lines"])
+    # The axis count ships in the payload so no display surface ever
+    # hardcodes "/4" (it is 5 now, and may grow again).
+    payload["fingerprint_axes"] = FINGERPRINT_AXES
     return payload
 
 

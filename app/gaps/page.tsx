@@ -63,6 +63,8 @@ function CorroborationBadges({ entry }: { entry: GapEntry }) {
   );
 }
 
+// Fired flags come from the payload (single threshold home in
+// signals.py) — this component never re-implements a threshold.
 function FingerprintChips({ entry }: { entry: GapEntry }) {
   return (
     <span>
@@ -72,15 +74,12 @@ function FingerprintChips({ entry }: { entry: GapEntry }) {
           {(entry.drift_pct * 100).toFixed(0)}%
         </span>
       ) : null}
-      {entry.dropout_ratio != null &&
-      entry.dropout_ratio >= 0.25 &&
-      entry.surveyed_count >= 3 ? (
+      {entry.dropout_fired ? (
         <span className="badge warn">
           {entry.dropout_members}/{entry.surveyed_count} left the price survey
         </span>
       ) : null}
-      {entry.volume_change_pct != null &&
-      (entry.volume_change_pct <= -0.15 || entry.volume_change_pct >= 0.25) ? (
+      {entry.volume_fired && entry.volume_change_pct != null ? (
         <span className="badge warn">
           volume {entry.volume_change_pct >= 0 ? "+" : ""}
           {(entry.volume_change_pct * 100).toFixed(0)}%
@@ -89,6 +88,11 @@ function FingerprintChips({ entry }: { entry: GapEntry }) {
       {entry.recalls > 0 ? (
         <span className="badge warn">
           {entry.recalls} recall{entry.recalls === 1 ? "" : "s"}
+        </span>
+      ) : null}
+      {entry.directory_exit_fired ? (
+        <span className="badge warn">
+          {entry.directory_exits} left the directory
         </span>
       ) : null}
     </span>
@@ -133,7 +137,10 @@ function GapTable({
               <td>{entry.te_code}</td>
               <td>{entry.member_count}</td>
               <td>
-                <b>{entry.fingerprints}/4</b> <FingerprintChips entry={entry} />{" "}
+                <b>
+                  {entry.fingerprints}/{entry.fingerprint_axes}
+                </b>{" "}
+                <FingerprintChips entry={entry} />{" "}
                 <CorroborationBadges entry={entry} />
               </td>
             </tr>

@@ -361,6 +361,14 @@ VERDICT_LANGUAGE = {
 
 _CLASS_DROPOUT_WEEKS = 8.0
 _CLASS_DROPOUT_RATIO_FIRE = 0.25
+# Recency bound on the dropout axis: a member whose last survey
+# appearance is older than this is ANCIENT HISTORY, not current strain —
+# it is treated like never-surveyed (excluded from both ratio terms).
+# Without this bound the axis's meaning silently depends on how many
+# YEARS of NADAC history happen to be ingested (the deep backtest
+# ingest tripled dropout counts in classes with long-departed
+# relabelers — caught by the 5-axis quality re-review, 2026-08-15).
+_CLASS_DROPOUT_MAX_WEEKS = 104.0
 # Directory-exit axis (the fast witness, SPEC §10.3): members that
 # vanished from the weekly NDC directory while still RX-active and not
 # end-marketed. Conservative v1 threshold — re-reviewed after four live
@@ -522,10 +530,15 @@ def class_supply_assessment(
         ).fetchone()
         last_seen = last_seen_row["last_seen"] if last_seen_row else None
         if last_seen is not None and horizon is not None:
-            surveyed += 1
             weeks_gone = (
                 _iso_to_date(horizon) - _iso_to_date(last_seen)
             ).days / 7.0
+            if weeks_gone > _CLASS_DROPOUT_MAX_WEEKS:
+                # Left the survey years ago: ancient history, treated
+                # like never-surveyed. Keeps the axis's meaning fixed
+                # regardless of ingested history depth.
+                continue
+            surveyed += 1
             if weeks_gone >= _CLASS_DROPOUT_WEEKS:
                 dropout_members += 1
     if discontinued_members:

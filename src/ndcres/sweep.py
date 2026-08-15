@@ -139,7 +139,16 @@ def run_sweep(conn: sqlite3.Connection) -> SweepResult:
         VERDICT_QUIET: 0,
     }
     for eq_class in enumerate_classes(conn):
-        assessment = class_supply_assessment(conn, eq_class.members)
+        assessment = class_supply_assessment(
+            conn,
+            eq_class.members,
+            class_key=(
+                eq_class.ingredient_set,
+                eq_class.df_route,
+                eq_class.strength_norm,
+                eq_class.te_code,
+            ),
+        )
         counts[assessment.verdict] = counts.get(assessment.verdict, 0) + 1
         rows.append(
             SweepClassRow(
@@ -196,8 +205,10 @@ def persist_sweep(conn: sqlite3.Connection, result: SweepResult) -> int:
                rep_ndc11, member_count, marketed_count, surveyed_count,
                fda_listed_members, drift_pct, drift_fired, dropout_members,
                dropout_ratio, volume_change_pct, volume_quarter, recalls,
-               fingerprints, verdict)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               fingerprints, verdict, discontinued_members, directory_exits,
+               directory_exit_fired)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?)
             """,
             [
                 (
@@ -220,6 +231,13 @@ def persist_sweep(conn: sqlite3.Connection, result: SweepResult) -> int:
                     row.assessment.recalls,
                     row.assessment.fingerprints,
                     row.assessment.verdict,
+                    row.assessment.discontinued_members,
+                    row.assessment.directory_exits,
+                    (
+                        int(row.assessment.directory_exit_fired)
+                        if row.assessment.directory_exits is not None
+                        else None
+                    ),
                 )
                 for row in result.classes
             ],

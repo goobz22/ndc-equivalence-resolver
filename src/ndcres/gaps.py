@@ -52,6 +52,14 @@ class GapEntry:
     recalls: int
     fingerprints: int
     verdict: str
+    # 5-axis additions; None on rows swept before the axis existed.
+    discontinued_members: int | None
+    directory_exits: int | None
+    directory_exit_fired: bool | None
+    # Fired flags derived from the stored components with the signals
+    # thresholds (single home) — display surfaces never re-implement.
+    dropout_fired: bool
+    volume_fired: bool
 
 
 @dataclass(frozen=True)
@@ -67,6 +75,21 @@ class GapReport:
 
 
 def _entry(row: sqlite3.Row) -> GapEntry:
+    from .signals import (
+        _CLASS_DROPOUT_RATIO_FIRE,
+        _VOLUME_DECLINE_FIRE,
+        _VOLUME_SURGE_FIRE,
+    )
+
+    dropout_fired = (
+        row["dropout_ratio"] is not None
+        and row["surveyed_count"] >= 3
+        and row["dropout_ratio"] >= _CLASS_DROPOUT_RATIO_FIRE
+    )
+    volume_fired = row["volume_change_pct"] is not None and (
+        row["volume_change_pct"] <= _VOLUME_DECLINE_FIRE
+        or row["volume_change_pct"] >= _VOLUME_SURGE_FIRE
+    )
     return GapEntry(
         ingredient_set=row["ingredient_set"],
         df_route=row["df_route"],
@@ -86,6 +109,15 @@ def _entry(row: sqlite3.Row) -> GapEntry:
         recalls=row["recalls"],
         fingerprints=row["fingerprints"],
         verdict=row["verdict"],
+        discontinued_members=row["discontinued_members"],
+        directory_exits=row["directory_exits"],
+        directory_exit_fired=(
+            bool(row["directory_exit_fired"])
+            if row["directory_exit_fired"] is not None
+            else None
+        ),
+        dropout_fired=dropout_fired,
+        volume_fired=volume_fired,
     )
 
 

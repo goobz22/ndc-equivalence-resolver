@@ -191,8 +191,10 @@ def append_sweep_to_history(
                rep_ndc11, member_count, marketed_count, surveyed_count,
                fda_listed_members, drift_pct, drift_fired, dropout_members,
                dropout_ratio, volume_change_pct, volume_quarter, recalls,
-               fingerprints, verdict)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               fingerprints, verdict, discontinued_members, directory_exits,
+               directory_exit_fired)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?)
             """,
             [
                 (
@@ -215,6 +217,9 @@ def append_sweep_to_history(
                     row["recalls"],
                     row["fingerprints"],
                     row["verdict"],
+                    row["discontinued_members"],
+                    row["directory_exits"],
+                    row["directory_exit_fired"],
                 )
                 for row in class_rows
             ],

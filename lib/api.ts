@@ -54,7 +54,13 @@ export interface ClassAssessment {
   volume_change_pct: number | null;
   volume_quarter: string | null;
   recalls: number;
+  discontinued_members: number;
+  directory_exits: number | null;
+  directory_exit_fired: boolean;
+  dropout_fired: boolean;
+  volume_fired: boolean;
   fingerprints: number;
+  fingerprint_axes: number;
   verdict: string;
   verdict_language: string;
   lines: string[];
@@ -157,7 +163,13 @@ export interface GapEntry {
   volume_change_pct: number | null;
   volume_quarter: string | null;
   recalls: number;
+  discontinued_members: number | null;
+  directory_exits: number | null;
+  directory_exit_fired: boolean | null;
+  dropout_fired: boolean;
+  volume_fired: boolean;
   fingerprints: number;
+  fingerprint_axes: number;
   verdict: string;
   corroborated_by: CorroborationSource[];
 }

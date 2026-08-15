@@ -150,7 +150,9 @@ def build_dossier(conn: sqlite3.Connection, ndc_text: str) -> Dossier:
                 "pack_count": dims.pack_count,
             }
         )
-    assessment = class_supply_assessment(conn, tuple(member_ndc11s))
+    assessment = class_supply_assessment(
+        conn, tuple(member_ndc11s), class_key=key
+    )
 
     placeholders = ",".join("?" for _ in member_ndc11s)
     fda_active = tuple(

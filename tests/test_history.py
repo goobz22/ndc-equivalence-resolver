@@ -120,3 +120,53 @@ class TestSweepArchive:
         bad.write_bytes(bytes(data))
         with pytest.raises((RuntimeError, sqlite3.DatabaseError)):
             open_history(bad)
+
+
+class TestSchemaShim:
+    def test_old_archive_gains_columns_via_shim(self, tmp_path: Path) -> None:
+        # A pre-5-axis archive (sweep_class without the new columns)
+        # must gain them on open, with old rows honestly NULL.
+        import sqlite3 as raw_sqlite
+
+        old = tmp_path / "old.db"
+        bare = raw_sqlite.connect(old)
+        bare.executescript(
+            """
+            CREATE TABLE sweep_run (
+              sweep_id INTEGER PRIMARY KEY AUTOINCREMENT, run_date TEXT NOT NULL,
+              started_at TEXT NOT NULL, nadac_horizon TEXT,
+              class_count INTEGER NOT NULL, fda_listed_count INTEGER NOT NULL,
+              constraint_count INTEGER NOT NULL, mixed_count INTEGER NOT NULL,
+              quiet_count INTEGER NOT NULL, elapsed_seconds REAL NOT NULL,
+              code_version TEXT NOT NULL
+            );
+            CREATE TABLE sweep_class (
+              sweep_id INTEGER NOT NULL, ingredient_set TEXT NOT NULL,
+              df_route TEXT NOT NULL, strength_norm TEXT NOT NULL,
+              te_code TEXT NOT NULL, rep_ndc11 TEXT NOT NULL,
+              member_count INTEGER NOT NULL, marketed_count INTEGER NOT NULL,
+              surveyed_count INTEGER NOT NULL, fda_listed_members INTEGER NOT NULL,
+              drift_pct REAL, drift_fired INTEGER NOT NULL,
+              dropout_members INTEGER NOT NULL, dropout_ratio REAL,
+              volume_change_pct REAL, volume_quarter TEXT,
+              recalls INTEGER NOT NULL, fingerprints INTEGER NOT NULL,
+              verdict TEXT NOT NULL,
+              PRIMARY KEY (sweep_id, ingredient_set, df_route, strength_norm, te_code)
+            );
+            INSERT INTO sweep_run VALUES (1, '2026-08-01', 'x', NULL, 1, 0, 1, 0, 0, 1.0, '0.1.0');
+            INSERT INTO sweep_class VALUES (1, 'ESTRADIOL', 'SYSTEM;TRANSDERMAL',
+              'UG24H:50', 'AB1', '00378464226', 5, 5, 5, 0, 0.2, 1, 0, 0.0,
+              0.7, '2026Q1', 2, 3, 'evidence-consistent-with-supply-constraint');
+            """
+        )
+        bare.commit()
+        bare.close()
+        conn = open_history(old)
+        columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(sweep_class)")
+        }
+        assert {"discontinued_members", "directory_exits",
+                "directory_exit_fired"} <= columns
+        row = conn.execute("SELECT * FROM sweep_class").fetchone()
+        assert row["discontinued_members"] is None  # honest: never measured
+        assert row["verdict"] == "evidence-consistent-with-supply-constraint"

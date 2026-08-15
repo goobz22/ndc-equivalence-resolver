@@ -343,6 +343,12 @@ CREATE TABLE IF NOT EXISTS sweep_class (
   recalls           INTEGER NOT NULL,
   fingerprints      INTEGER NOT NULL,
   verdict           TEXT NOT NULL,
+  -- Added with the 5-axis assessment (SPEC §7.2). NULLABLE: historical
+  -- rows genuinely lack the measurement — never faked to 0. Existing
+  -- databases gain them via the additive ALTER shim in connect().
+  discontinued_members INTEGER,
+  directory_exits      INTEGER,
+  directory_exit_fired INTEGER,
   PRIMARY KEY (sweep_id, ingredient_set, df_route, strength_norm, te_code)
 );
 CREATE INDEX IF NOT EXISTS idx_sweep_class_verdict
@@ -451,6 +457,27 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
     ).fetchone()
     if legacy and "REFERENCES product" in (legacy["sql"] or ""):
         conn.execute("DROP TABLE search_doc")
+    # Additive schema shim: databases created before the 5-axis
+    # assessment (incl. the downloaded history archive) lack the newer
+    # sweep_class columns; CREATE IF NOT EXISTS cannot add them. Old
+    # rows stay NULL — the measurement honestly did not exist.
+    existing_sweep_class = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='sweep_class'"
+    ).fetchone()
+    if existing_sweep_class is not None:
+        present = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(sweep_class)")
+        }
+        for column in (
+            "discontinued_members",
+            "directory_exits",
+            "directory_exit_fired",
+        ):
+            if column not in present:
+                conn.execute(
+                    f"ALTER TABLE sweep_class ADD COLUMN {column} INTEGER"
+                )
     # Read-heavy workload over a few hundred MB: a generous page cache and
     # memory-mapped reads keep the resolve path off the disk.
     conn.execute("PRAGMA cache_size = -65536")  # 64MB

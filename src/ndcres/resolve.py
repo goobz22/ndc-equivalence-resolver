@@ -655,7 +655,9 @@ def _resolve_from_seed(
         + [a.dims.ndc11 for a in tiers["T2"] if a.dims.ndc11]
     )
     assessment = (
-        class_supply_assessment(conn, class_members) if class_members else None
+        class_supply_assessment(conn, class_members, class_key=seed.eq_group)
+        if class_members
+        else None
     )
 
     return Resolution(

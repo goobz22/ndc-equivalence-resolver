@@ -27,11 +27,15 @@ from .db import connect
 from .signals import survey_horizon
 
 # Vercel's serverless budget is 250MB uncompressed for the whole bundle
-# (function + deps + this file). Deps run ~40MB, so the database gets a
-# hard 160MB ceiling (~200MB bundle, ~50MB clear of the platform limit).
-# Raised from 150MB when search_doc joined the export (SPEC §8).
+# (function + deps + this file). Deps run ~40MB. Budget math for the
+# 176MiB (184.5MB) gate: ~167MB current artifact + ≤1MB directory-
+# membership window (SPEC §10.3) + ~10MB for the 13-sweep watch-feed
+# window (§10.4; ~0.8MB/sweep) ≈ 178MB, leaving ~6MB organic-growth
+# slack under the gate and ~25MB of bundle clearance under the platform
+# ceiling. Raised from 160MiB with the 5-axis assessment (§7.2);
+# previously raised from 150MiB when search_doc joined (§8).
 # CI fails the deploy on breach.
-SIZE_GATE_BYTES = 160 * 1024 * 1024
+SIZE_GATE_BYTES = 176 * 1024 * 1024
 
 _FULL_COPY_TABLES = (
     "meta",
@@ -177,6 +181,19 @@ def export_web_db(
             conn.execute(
                 "INSERT INTO web.sweep_class SELECT * FROM main.sweep_class "
                 "WHERE sweep_id = (SELECT max(sweep_id) FROM main.sweep_run)"
+            )
+
+            # Directory-membership window (SPEC §10.3): the serving
+            # path's live class_supply_assessment computes the
+            # directory-exit axis from these — one engine, zero drift
+            # between what a sweep said and what /api/resolve shows.
+            conn.execute(
+                "INSERT INTO web.ndc_membership_run "
+                "SELECT * FROM main.ndc_membership_run"
+            )
+            conn.execute(
+                "INSERT INTO web.ndc_membership_delta "
+                "SELECT * FROM main.ndc_membership_delta"
             )
     finally:
         conn.execute("DETACH DATABASE web")

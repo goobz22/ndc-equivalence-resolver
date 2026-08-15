@@ -103,3 +103,57 @@ class TestSweepInTheExport:
             assert classes == 1
         finally:
             web.close()
+
+
+class TestSizeGate:
+    def test_size_gate_refuses_oversized_artifact(
+        self, loaded_db_path: Path, tmp_path: Path
+    ) -> None:
+        # INV-16.2 (closes the Phase-0 audit's OPEN row): a planted
+        # 1KB gate must refuse the real artifact AND remove the
+        # oversized file.
+        from ndcres.export import export_web_db
+
+        dest = tmp_path / "web.db"
+        with pytest.raises(RuntimeError, match="over the"):
+            export_web_db(loaded_db_path, dest, size_gate=1024)
+        assert not dest.exists()
+
+
+class TestMembershipWindowExport:
+    def test_membership_tables_ship(
+        self, loaded_db_path: Path, tmp_path: Path
+    ) -> None:
+        import shutil
+
+        from ndcres.db import connect
+        from ndcres.export import export_web_db
+
+        db_copy = tmp_path / "full.db"
+        shutil.copy(loaded_db_path, db_copy)
+        conn = connect(db_copy)
+        with conn:
+            conn.execute(
+                "INSERT INTO ndc_membership_run (snapshot_date, present_count,"
+                " appeared_count, vanished_count, is_baseline)"
+                " VALUES ('2026-08-01', 10, 0, 0, 1)"
+            )
+            conn.execute(
+                "INSERT INTO ndc_membership_delta (snapshot_date, ndc11,"
+                " change, last_ob_type) VALUES"
+                " ('2026-08-08', '00000000001', 'vanished', 'RX')"
+            )
+        conn.close()
+        dest = tmp_path / "web.db"
+        export_web_db(db_copy, dest)
+        web = connect_readonly(dest)
+        try:
+            runs = web.execute(
+                "SELECT count(*) FROM ndc_membership_run"
+            ).fetchone()[0]
+            deltas = web.execute(
+                "SELECT count(*) FROM ndc_membership_delta"
+            ).fetchone()[0]
+            assert runs == 1 and deltas == 1
+        finally:
+            web.close()
