@@ -361,6 +361,16 @@ VERDICT_LANGUAGE = {
 
 _CLASS_DROPOUT_WEEKS = 8.0
 _CLASS_DROPOUT_RATIO_FIRE = 0.25
+# Directory-exit axis (the fast witness, SPEC §10.3): members that
+# vanished from the weekly NDC directory while still RX-active and not
+# end-marketed. Conservative v1 threshold — re-reviewed after four live
+# weekly snapshots.
+_DIRECTORY_EXIT_WINDOW_WEEKS = 12
+_DIRECTORY_EXIT_FIRE = 2
+# The number of independent evidence axes a class assessment weighs
+# (drift, dropout, volume, recalls, directory-exit). Serialized so no
+# display surface ever hardcodes it.
+FINGERPRINT_AXES = 5
 _VOLUME_DECLINE_FIRE = -0.15
 # A demand surge strains supply just as a volume collapse evidences it:
 # either direction of large movement is a constraint fingerprint when it
@@ -381,21 +391,92 @@ class ClassAssessment:
     volume_change_pct: float | None
     volume_quarter: str | None
     recalls: int
-    # Count of independent evidence axes firing (drift, dropout, volume,
-    # recalls) — computed BEFORE the verdict ladder, so an fda-listed
-    # class still reports how much independent evidence backs (or fails
-    # to back) the listing.
+    # Formally end-marketed members: discontinuation, excluded from both
+    # dropout terms and reported separately.
+    discontinued_members: int
+    # Silent directory exits in the trailing window; None until two
+    # membership snapshots exist (the axis can then never fire).
+    directory_exits: int | None
+    directory_exit_fired: bool
+    # Per-axis fired flags so no display surface re-implements the
+    # thresholds.
+    dropout_fired: bool
+    volume_fired: bool
+    # Count of independent evidence axes firing (of FINGERPRINT_AXES) —
+    # computed BEFORE the verdict ladder, so an fda-listed class still
+    # reports how much independent evidence backs (or fails to back)
+    # the listing.
     fingerprints: int
     verdict: str
     verdict_language: str
     lines: tuple[str, ...]
 
 
+def _end_marketed_members(
+    conn: sqlite3.Connection, members: tuple[str, ...]
+) -> set[str]:
+    """Members formally end-marketed in the NDC directory (package OR
+    product level). Their vanishing from the price survey is
+    DISCONTINUATION — the dropout axis must not read it as silent
+    supply strain."""
+    if not members:
+        return set()
+    placeholders = ",".join("?" for _ in members)
+    return {
+        row["ndc11"]
+        for row in conn.execute(
+            f"SELECT k.ndc11 FROM package k JOIN product p USING (ndc9) "  # noqa: S608
+            f"WHERE k.ndc11 IN ({placeholders}) AND ("
+            "k.end_marketing IS NOT NULL OR p.end_marketing IS NOT NULL)",
+            members,
+        )
+    }
+
+
+def _directory_exits(
+    conn: sqlite3.Connection, class_key: tuple[str, str, str, str]
+) -> int | None:
+    """Silent directory exits for this class in the trailing window.
+
+    Counts members that VANISHED from the weekly NDC directory while
+    still RX-active and NOT end-marketed at last sight (the membership
+    snapshots stamp that state — SPEC §10.3). Returns None (axis not
+    computable, can never fire) until two snapshots exist.
+    """
+    runs = conn.execute(
+        "SELECT count(*) AS n, max(snapshot_date) AS latest "
+        "FROM ndc_membership_run"
+    ).fetchone()
+    if runs is None or runs["n"] < 2 or runs["latest"] is None:
+        return None
+    floor = (
+        _iso_to_date(runs["latest"])
+        - timedelta(weeks=_DIRECTORY_EXIT_WINDOW_WEEKS)
+    ).isoformat()
+    count = conn.execute(
+        """
+        SELECT count(*) FROM ndc_membership_delta
+        WHERE change = 'vanished'
+          AND last_end_marketing IS NULL
+          AND last_ob_type = 'RX'
+          AND ingredient_set = ? AND df_route = ?
+          AND strength_norm = ? AND te_code = ?
+          AND snapshot_date >= ?
+        """,
+        (*class_key, floor),
+    ).fetchone()[0]
+    return int(count)
+
+
 def class_supply_assessment(
-    conn: sqlite3.Connection, member_ndc11s: tuple[str, ...]
+    conn: sqlite3.Connection,
+    member_ndc11s: tuple[str, ...],
+    *,
+    class_key: tuple[str, str, str, str] | None = None,
 ) -> ClassAssessment:
     members = tuple(dict.fromkeys(member_ndc11s))
     horizon = survey_horizon(conn)
+    end_marketed = _end_marketed_members(conn, members)
     lines: list[str] = []
 
     # FDA list, across the class.
@@ -421,12 +502,20 @@ def class_supply_assessment(
     drift_fired = False
     surveyed = 0
     dropout_members = 0
+    discontinued_members = 0
     for ndc11 in members:
         pct = drift_pct(conn, ndc11)
         if pct is not None:
             if class_drift is None or pct > class_drift:
                 class_drift = pct
             drift_fired = drift_fired or pct >= _DRIFT_FIRE_PCT
+        if ndc11 in end_marketed:
+            # Formally discontinued: belongs in NEITHER dropout term.
+            # Counting it in the numerator fakes strain; leaving it in
+            # the denominator dilutes the ratio for exactly the classes
+            # where discontinuation is heaviest.
+            discontinued_members += 1
+            continue
         last_seen_row = conn.execute(
             "SELECT max(as_of_last) AS last_seen FROM nadac WHERE ndc11 = ?",
             (ndc11,),
@@ -439,6 +528,11 @@ def class_supply_assessment(
             ).days / 7.0
             if weeks_gone >= _CLASS_DROPOUT_WEEKS:
                 dropout_members += 1
+    if discontinued_members:
+        lines.append(
+            f"{discontinued_members} member(s) are formally end-marketed in "
+            "the NDC directory - discontinuation, not silent survey dropout"
+        )
     if class_drift is not None:
         lines.append(
             f"class acquisition cost {class_drift:+.1%} over the trailing "
@@ -526,18 +620,43 @@ def class_supply_assessment(
                 "openFDA enforcement data (trailing two years)"
             )
 
+    # The fast witness: silent exits from the weekly NDC directory.
+    directory_exits: int | None = None
+    if class_key is not None:
+        directory_exits = _directory_exits(conn, class_key)
+    directory_exit_fired = (
+        directory_exits is not None and directory_exits >= _DIRECTORY_EXIT_FIRE
+    )
+    if directory_exit_fired:
+        lines.append(
+            f"{directory_exits} member(s) vanished from the weekly NDC "
+            "directory while still RX-active and not end-marketed "
+            f"(trailing {_DIRECTORY_EXIT_WINDOW_WEEKS} weeks) - the "
+            "fastest public witness of products leaving the shelf-facing "
+            "record"
+        )
+    elif class_key is not None and directory_exits is None:
+        lines.append(
+            "directory-exit tracking: accumulating (first comparison after "
+            "two weekly membership snapshots)"
+        )
+
+    dropout_fired = (
+        dropout_ratio is not None
+        and surveyed >= 3
+        and dropout_ratio >= _CLASS_DROPOUT_RATIO_FIRE
+    )
+    volume_fired = volume_change is not None and (
+        volume_change <= _VOLUME_DECLINE_FIRE
+        or volume_change >= _VOLUME_SURGE_FIRE
+    )
     fingerprints = sum(
         (
             drift_fired,
-            dropout_ratio is not None
-            and surveyed >= 3
-            and dropout_ratio >= _CLASS_DROPOUT_RATIO_FIRE,
-            volume_change is not None
-            and (
-                volume_change <= _VOLUME_DECLINE_FIRE
-                or volume_change >= _VOLUME_SURGE_FIRE
-            ),
+            dropout_fired,
+            volume_fired,
             recalls > 0,
+            directory_exit_fired,
         )
     )
     if fda_listed:
@@ -560,6 +679,11 @@ def class_supply_assessment(
         volume_change_pct=volume_change,
         volume_quarter=volume_quarter,
         recalls=recalls,
+        discontinued_members=discontinued_members,
+        directory_exits=directory_exits,
+        directory_exit_fired=directory_exit_fired,
+        dropout_fired=dropout_fired,
+        volume_fired=volume_fired,
         fingerprints=fingerprints,
         verdict=verdict,
         verdict_language=VERDICT_LANGUAGE[verdict],
