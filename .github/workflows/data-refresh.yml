@@ -64,6 +64,8 @@ jobs:
           echo "baseline sweep runs: $(cat data/.archive-baseline)"
       - name: Snapshot the FDA shortage list (FDA keeps no history; we do)
         run: uv run ndcres --db data/ndcres.db fda-snapshot --history data/ndcres-history.db
+      - name: Snapshot directory membership (the fast witness)
+        run: uv run ndcres --db data/ndcres.db membership-snapshot --history data/ndcres-history.db
       - name: Market-wide sweep (appends to the archive)
         run: uv run ndcres --db data/ndcres.db sweep --history data/ndcres-history.db
       - name: Export the serving database (size-gated)

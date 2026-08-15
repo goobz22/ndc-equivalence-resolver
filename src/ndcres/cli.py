@@ -136,6 +136,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="also append this sweep to the durable archive database",
     )
 
+    membership_cmd = subparsers.add_parser(
+        "membership-snapshot",
+        help="record what the NDC directory says right now (delta-style) "
+        "into the append-only membership history",
+    )
+    membership_cmd.add_argument(
+        "--history",
+        type=Path,
+        default=None,
+        help="also record into the durable archive database",
+    )
+
     snapshot_cmd = subparsers.add_parser(
         "fda-snapshot",
         help="record what the FDA shortage list says right now into the "
@@ -649,6 +661,38 @@ def cmd_dossier(
     return 0
 
 
+def cmd_membership_snapshot(
+    db_path: Path | None, history_path: Path | None
+) -> int:
+    from .history import open_history
+    from .membership import copy_recent_deltas, snapshot_membership
+
+    conn = connect(db_path)
+    if history_path is not None:
+        history_conn = open_history(history_path)
+    else:
+        history_conn = conn
+    try:
+        try:
+            snapshot = snapshot_membership(conn, history_conn)
+        except RuntimeError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 2
+        kind = "baseline" if snapshot.is_baseline else "delta"
+        print(
+            f"membership snapshot {snapshot.snapshot_date} ({kind}): "
+            f"{snapshot.present:,} present, +{snapshot.appeared} appeared, "
+            f"-{snapshot.vanished} vanished"
+        )
+        if history_path is not None:
+            copied = copy_recent_deltas(history_conn, conn)
+            print(f"copied {copied} recent delta row(s) into the local db")
+    finally:
+        if history_path is not None:
+            history_conn.close()
+    return 0
+
+
 def cmd_fda_snapshot(db_path: Path | None, history_path: Path | None) -> int:
     from .history import open_history, snapshot_fda_list
 
@@ -734,6 +778,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return cmd_signal(args.db, args.ndc, args.as_json)
     if args.command == "sweep":
         return cmd_sweep(args.db, args.as_json, args.history)
+    if args.command == "membership-snapshot":
+        return cmd_membership_snapshot(args.db, args.history)
     if args.command == "fda-snapshot":
         return cmd_fda_snapshot(args.db, args.history)
     if args.command == "dossier":

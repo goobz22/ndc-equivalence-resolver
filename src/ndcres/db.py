@@ -257,6 +257,51 @@ CREATE TABLE IF NOT EXISTS fda_list_history (
   PRIMARY KEY (snapshot_date, snapshot_source, drug_name_norm, company, status)
 );
 
+-- Directory-membership history (SPEC §10.3): what the NDC Directory
+-- itself said, week over week — the fast counterpart to the lagging
+-- price/volume axes. A rolling STATE table (one row per directory
+-- ndc11, upserted weekly) is the baseline; append-only DELTA rows
+-- record appearances/vanishings from the second snapshot on. A
+-- vanished NDC's delta row is stamped with its last-sight marketing
+-- status / OB type / equivalence-class key FROM STATE — the current
+-- database no longer has the row, so state is the only honest witness.
+-- All three deliberately NOT mirror-wiped (the nadac mechanism).
+CREATE TABLE IF NOT EXISTS ndc_membership_run (
+  snapshot_date   TEXT PRIMARY KEY,
+  snapshot_source TEXT NOT NULL DEFAULT 'ndc-directory-weekly',
+  present_count   INTEGER NOT NULL,
+  appeared_count  INTEGER NOT NULL,
+  vanished_count  INTEGER NOT NULL,
+  is_baseline     INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS ndc_membership_delta (
+  snapshot_date      TEXT NOT NULL,
+  ndc11              TEXT NOT NULL,
+  change             TEXT NOT NULL,  -- 'appeared' | 'vanished'
+  last_end_marketing TEXT,           -- state at last sight (vanished rows)
+  last_ob_type       TEXT,           -- RX/OTC/DISCN at last sight
+  ingredient_set     TEXT,           -- legal-class key at last sight;
+  df_route           TEXT,           -- NULL when not a TE-rated member
+  strength_norm      TEXT,
+  te_code            TEXT,
+  PRIMARY KEY (snapshot_date, ndc11, change)
+);
+CREATE INDEX IF NOT EXISTS idx_membership_delta_class
+  ON ndc_membership_delta(ingredient_set, df_route, strength_norm, te_code, snapshot_date);
+
+CREATE TABLE IF NOT EXISTS ndc_membership_state (
+  ndc11          TEXT PRIMARY KEY,
+  end_marketing  TEXT,
+  ob_type        TEXT,
+  ingredient_set TEXT,
+  df_route       TEXT,
+  strength_norm  TEXT,
+  te_code        TEXT,
+  first_seen     TEXT NOT NULL,
+  last_seen      TEXT NOT NULL
+);
+
 -- Market-wide sweep results (SPEC §10): one sweep_run row per
 -- execution, one sweep_class row per TE-rated equivalence class.
 -- APPEND-ONLY history — deliberately NOT in MIRROR_TABLES, so refreshes

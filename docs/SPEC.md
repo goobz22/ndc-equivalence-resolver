@@ -285,6 +285,35 @@ where the data was gotten from."
   planted case): fda-listed ⇔ any active record; constraint ⇔ ≥2 fingerprints;
   mixed ⇔ 1; quiet ⇔ 0.
 
+### 10.3 Directory-membership history (`src/ndcres/membership.py`)
+
+The NDC Directory is a weekly full replacement: a product that vanishes from it
+has left the shelf-facing record NOW — weeks before the CMS-damped price survey
+notices, months before quarterly volumes do. The membership snapshot records
+that fast witness:
+
+- **`ndc_membership_state`** — one row per directory ndc11 (the rolling
+  baseline), upserted each snapshot with marketing status, best-linked OB type
+  (RX > OTC > DISCN), and the TE-rated equivalence-class key (via
+  `sweep.enumerate_classes` — one engine; multi-class members take the
+  lexicographically first key, deterministic).
+- **`ndc_membership_delta`** — append-only appeared/vanished rows from the
+  second snapshot on. A vanished NDC's row is stamped **from state** — the
+  current database no longer holds the row, so the state table is the only
+  honest witness to what it looked like at last sight.
+- **`ndc_membership_run`** — one row per snapshot; date is dataset-relative
+  (the ndc `source_run` fetch date; refuses loudly when nothing was ingested);
+  same-date re-runs are idempotent no-ops. First run = baseline: state
+  populated, ZERO delta rows (a baseline has nothing to differ from).
+
+Snapshots write to the durable archive and the local db;
+`copy_recent_deltas(history, main, window_weeks=12)` backfills the trailing
+window into the fresh weekly pipeline database. None of the three tables is
+mirror-wiped. The directory-exit signal axis (§7.2, when it lands) is the
+consumer; until then the tables only accumulate. CLI:
+`ndcres membership-snapshot [--history PATH]`; weekly workflow runs it between
+the FDA-list snapshot and the sweep.
+
 ### 10.2 Longitudinal history (`src/ndcres/history.py`, Phase 4 — landed)
 
 FDA deletes resolved shortage records instead of keeping history (HHS/ASPE had
@@ -524,6 +553,8 @@ the reason and owner. The crosswalk test fails on any dangling reference.
 | INV-10.4 | An fda-listed class still reports its independent fingerprint count (verdict short-circuit never zeroes it) | tests/test_sweep.py::test_fda_listed_class_still_reports_fingerprints |
 | INV-10.5 | No swept member is a sample package or a discontinued-excluded product; enumeration is deterministic with the representative among the members | tests/test_sweep.py::test_no_member_is_sample_or_discontinued_excluded ; tests/test_sweep.py::test_enumeration_is_deterministic |
 | INV-10.6 | Sweep history is append-only, survives refresh wipes, and round-trips the assessment | tests/test_sweep.py::test_append_only_two_runs ; tests/test_sweep.py::test_history_survives_a_refresh ; tests/test_sweep.py::test_persisted_rows_round_trip_the_assessment |
+| INV-10.9 | Membership snapshots: first run is a baseline with zero delta rows; a vanished NDC's delta row carries its last-sight state (the current db no longer has the row); TE-rated members carry class keys | tests/test_membership.py::test_first_run_is_baseline_with_no_delta_rows ; tests/test_membership.py::test_vanished_row_carries_prior_state ; tests/test_membership.py::test_state_carries_class_keys_for_te_rated_members |
+| INV-10.10 | Membership snapshots are same-date idempotent, refuse when nothing was ingested, and the trailing delta window copies idempotently into a fresh db | tests/test_membership.py::test_same_snapshot_date_is_idempotent ; tests/test_membership.py::test_no_ndc_ingest_refuses_loudly ; tests/test_membership.py::test_deltas_copy_into_the_main_db_within_window ; tests/test_membership.py::test_empty_history_copies_nothing |
 | INV-10.7 | FDA-list snapshots record the current list dataset-relatively, dedupe same-date re-runs, and refuse when nothing was ingested | tests/test_history.py::test_snapshot_records_current_list ; tests/test_history.py::test_same_snapshot_date_dedupes ; tests/test_history.py::test_snapshot_date_is_dataset_relative ; tests/test_history.py::test_no_shortage_ingest_fails_loudly ; tests/test_history.py::test_snapshot_into_the_main_db_itself_works |
 | INV-10.8 | The archive assigns fresh sweep ids (colliding runner-local ids can't overwrite), refuses missing sweeps, and refuses corrupt archives at open | tests/test_history.py::test_appends_assign_fresh_ids ; tests/test_history.py::test_missing_sweep_refuses ; tests/test_history.py::test_corrupt_archive_refuses_at_open |
 | INV-11.1 | The public case study contains ONLY ingested-source URLs (allowlist over the rendered markdown) | tests/test_dossier.py::test_public_markdown_is_ingested_data_only |
