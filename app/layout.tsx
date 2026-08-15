@@ -3,8 +3,15 @@ import Link from "next/link";
 import "./globals.css";
 import { MetaFooter } from "@/components/MetaFooter";
 
+const site =
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://ndc-equivalence-resolver.vercel.app";
+
 export const metadata: Metadata = {
-  title: "NDC Equivalence Resolver",
+  metadataBase: new URL(site),
+  title: {
+    default: "NDC Equivalence Resolver",
+    template: "%s · NDC Equivalence Resolver",
+  },
   description:
     "When your pharmacy is out of your medication: the same drug from other manufacturers, what a pharmacist can swap directly, and what your prescriber needs to write to unlock the rest. Built entirely from public FDA, NLM, and CMS data.",
 };

@@ -189,6 +189,23 @@ def class_assessment_dict(assessment: ClassAssessment) -> dict[str, Any]:
     return payload
 
 
+def _class_ref(resolution: Resolution) -> dict[str, Any] | None:
+    """The seed's canonical class address, when it has a TE-rated class."""
+    from .classpage import class_slug
+
+    seed = resolution.seed_annotation
+    if seed is None or seed.dims.eq_group is None:
+        return None
+    ingredient_set, df_route, strength_norm, te_code = seed.dims.eq_group
+    return {
+        "slug": class_slug(ingredient_set, df_route, strength_norm, te_code),
+        "ingredient_set": ingredient_set,
+        "df_route": df_route,
+        "strength_norm": strength_norm,
+        "te_code": te_code,
+    }
+
+
 def resolution_dict(
     resolution: Resolution, *, sources: SourceRefs
 ) -> dict[str, Any]:
@@ -196,6 +213,7 @@ def resolution_dict(
         "seed": annotated_dict(resolution.seed_annotation)
         if resolution.seed_annotation
         else None,
+        "class_ref": _class_ref(resolution),
         "seed_status": resolution.seed_status,
         "notes": list(resolution.notes),
         "class_assessment": class_assessment_dict(resolution.class_assessment)

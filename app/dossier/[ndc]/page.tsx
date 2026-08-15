@@ -1,91 +1,52 @@
-"use client";
-
-import { use, useEffect, useState } from "react";
-import { SourceRefs } from "@/lib/api";
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { ApiError, DossierPayload, serverApi } from "@/lib/api.server";
+import { PrintButton } from "@/components/PrintButton";
 import { SourceTag } from "@/components/SourceTag";
 import { SupplyPicture } from "@/components/SupplyPicture";
-import type { ClassAssessment } from "@/lib/api";
 
-interface DossierPayload {
-  class_key: {
-    ingredient_set: string;
-    df_route: string;
-    strength_norm: string;
-    te_code: string;
-  };
-  rep_ndc11: string;
-  members: {
-    ndc11: string;
-    ndc_as_filed: string | null;
-    name: string | null;
-    labeler: string | null;
-    application: string | null;
-    te_code: string | null;
-    marketed: boolean;
-    pack_count: number | null;
-  }[];
-  assessment: ClassAssessment;
-  fda_active: {
-    ndc11: string;
-    status: string | null;
-    initial_posting: string | null;
-    update_date: string | null;
-  }[];
-  nadac_series: Record<
-    string,
-    { effective_date: string; price: number; as_of_last: string | null }[]
-  >;
-  sdud_trend: { year: number; quarter: number; units: number }[];
-  recalls: {
-    recall_initiation: string | null;
-    classification: string | null;
-    status: string | null;
-    reason: string | null;
-  }[];
-  sweep_history: {
-    run_date: string;
-    verdict: string;
-    fingerprints: number;
-  }[];
-  sources: SourceRefs;
-  disclaimer: string;
+async function fetchDossier(ndc: string): Promise<DossierPayload | null> {
+  try {
+    return await serverApi.dossier(decodeURIComponent(ndc));
+  } catch (problem) {
+    if (problem instanceof ApiError && problem.status === 404) return null;
+    throw problem;
+  }
 }
 
-export default function DossierPage({
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ ndc: string }>;
+}): Promise<Metadata> {
+  const { ndc } = await params;
+  const dossier = await fetchDossier(ndc);
+  if (!dossier) return { title: "Evidence dossier" };
+  const ingredient = dossier.class_key.ingredient_set
+    .toLowerCase()
+    .split("|")
+    .join(" + ");
+  return {
+    title: `Supply evidence dossier: ${ingredient} (TE ${dossier.class_key.te_code})`,
+    description: dossier.assessment.verdict_language,
+  };
+}
+
+export default async function DossierPage({
   params,
 }: {
   params: Promise<{ ndc: string }>;
 }) {
-  const { ndc } = use(params);
-  const [dossier, setDossier] = useState<DossierPayload | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch(`/api/dossier/${encodeURIComponent(decodeURIComponent(ndc))}`, {
-      headers: { accept: "application/json" },
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          const body = (await response.json().catch(() => null)) as {
-            detail?: string;
-          } | null;
-          throw new Error(body?.detail ?? `request failed (${response.status})`);
-        }
-        return response.json() as Promise<DossierPayload>;
-      })
-      .then(setDossier)
-      .catch((problem: Error) => setError(problem.message));
-  }, [ndc]);
-
-  if (error) return <div className="error-box">{error}</div>;
-  if (!dossier) return <div className="loading">Assembling the evidence…</div>;
+  const { ndc } = await params;
+  const dossier = await fetchDossier(ndc);
+  if (!dossier) notFound();
 
   const key = dossier.class_key;
 
   return (
     <>
       <div className="note-actions">
-        <button onClick={() => window.print()}>Print this dossier</button>
+        <PrintButton label="Print this dossier" />
       </div>
       <section className="tier-section">
         <h2>

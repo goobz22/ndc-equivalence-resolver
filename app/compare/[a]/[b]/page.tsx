@@ -1,8 +1,8 @@
-"use client";
-
+import type { Metadata } from "next";
 import Link from "next/link";
-import { use, useEffect, useState } from "react";
-import { api, Explanation } from "@/lib/api";
+import { notFound } from "next/navigation";
+import { Explanation } from "@/lib/api";
+import { ApiError, serverApi } from "@/lib/api.server";
 import { SourceTag } from "@/components/SourceTag";
 
 const VERDICT_CLASS: Record<string, string> = {
@@ -13,24 +13,42 @@ const VERDICT_CLASS: Record<string, string> = {
   EXCLUDED: "excluded",
 };
 
-export default function ComparePage({
+async function fetchExplanation(
+  a: string,
+  b: string,
+): Promise<Explanation | null> {
+  try {
+    return await serverApi.explain(decodeURIComponent(a), decodeURIComponent(b));
+  } catch (problem) {
+    if (problem instanceof ApiError && problem.status === 404) return null;
+    throw problem;
+  }
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ a: string; b: string }>;
+}): Promise<Metadata> {
+  const { a, b } = await params;
+  const explanation = await fetchExplanation(a, b);
+  if (!explanation) return { title: "Compare products" };
+  const left = explanation.left.name ?? explanation.left.ndc11 ?? "A";
+  const right = explanation.right.name ?? explanation.right.ndc11 ?? "B";
+  return {
+    title: `${left} vs ${right} — are they interchangeable?`,
+    description: explanation.verdict_language,
+  };
+}
+
+export default async function ComparePage({
   params,
 }: {
   params: Promise<{ a: string; b: string }>;
 }) {
-  const { a, b } = use(params);
-  const [explanation, setExplanation] = useState<Explanation | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api
-      .explain(decodeURIComponent(a), decodeURIComponent(b))
-      .then(setExplanation)
-      .catch((problem: Error) => setError(problem.message));
-  }, [a, b]);
-
-  if (error) return <div className="error-box">{error}</div>;
-  if (!explanation) return <div className="loading">Comparing…</div>;
+  const { a, b } = await params;
+  const explanation = await fetchExplanation(a, b);
+  if (!explanation) notFound();
 
   return (
     <>

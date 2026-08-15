@@ -433,23 +433,51 @@ test). Serializers emit JSON-native types only (no tuples).
 | `GET /api/signal/{ndc}` | `signal_dict`: components with evidence + stress score |
 | `GET /api/search?q=&limit=` | result list (Phase 1 upgrades this to grouped product grain) |
 | `GET /api/meta` | per-source vintages (source_run) + disclaimer |
-| `GET /api/dossier/{ndc}` | Phase 5 |
-| `GET /api/gaps?limit=` | Phase 6 |
+| `GET /api/dossier/{ndc}` | dossier payload (§11) |
+| `GET /api/gaps?limit=` | gap report (§12) |
+| `GET /api/classes` | canonical class index: slug + key + rep + verdict per latest-sweep class (feeds the sitemap) |
+| `GET /api/class/{slug}` | one class + its full resolution via the representative package; helpful 404 for unknown/stale slugs |
 
 Errors: unknown/unresolvable NDC → 404 with a helpful detail message; a missing
 database is a broken deploy → 500 that says so. Input spellings: all accepted NDC
 spellings resolve identically.
 
-## 15. UI pages & data dependencies
+## 15. UI pages, rendering model, and canonical addresses
 
-All pages are client-fetch ("use client") against `/api/*` via the typed client
-`lib/api.ts` (types mirror serialize.py):
-`/` (hero = §1 positioning + tier explainer) · `/browse` (search) · `/ndc/[ndc]`
-(resolution + SupplyPicture) · `/compare/[a]/[b]` (explain) · `/note/[a]/[b]`
-(printable prescriber note) · Phase pages: `/dossier/[ndc]`, `/gaps`, `/sources`.
-UI has no independent data logic — it renders API payloads. (No JS unit tests by
-design; behavior is pinned at the API layer, page rendering verified manually and
-by deploy smoke checks. Revisit if UI logic ever grows beyond rendering.)
+**Server-rendered by default** (SEO is a product requirement: the people this
+tool exists for find it via search). Server components fetch the API directly
+via `lib/api.server.ts` (`NDCRES_API_BASE ?? NDCRES_API_PROXY ?? local dev
+uvicorn`, Next data-cache `revalidate` ~1h) — the `next.config.ts` rewrite
+serves only incoming browser requests from the remaining client islands.
+
+- Server pages: `/` · `/ndc/[ndc]` · `/class/[slug]` (canonical class page) ·
+  `/gaps` · `/sources` · `/dossier/[ndc]` · `/compare/[a]/[b]` ·
+  `/note/[a]/[b]`. Each carries `generateMetadata` (drug names in titles;
+  descriptions use `verdict_language` — probabilistic by construction).
+- Client islands (enumerated; everything else is server): `SearchBox`,
+  `BrowseClient` (the `/browse` body — interactive search stays client behind
+  a metadata-bearing server shell), `MetaFooter`, `PrintButton`,
+  `app/error.tsx`.
+- **Canonical scheme**: a TE-rated class's address is `/class/{slug}` — slug =
+  pure function of the class key: lowercased human head (first two
+  ingredients + form;route + humanized strength + TE, capped ~80 chars) +
+  8-hex sha1 suffix of the full joined key. The suffix is load-bearing: keys
+  collide after punctuation cleaning (`RAW:0.05%` vs `RAW:005`); the hash
+  cannot. Slugs are stored nowhere (`classpage.py` computes + caches per
+  (db, sweep_id) — the serving db is immutable per deploy). `/ndc/[ndc]`
+  pages declare `rel=canonical` to their class page via the resolution's
+  `class_ref`.
+- **Sitemap policy** (`app/sitemap.ts`): the ~2,900 `/class/{slug}` URLs +
+  static pages, `lastModified` = sweep run_date; `/ndc/*` package URLs are
+  DELIBERATELY excluded (canonicals exist; 216k package URLs = crawl waste).
+  A sitemap must never 500 — API failure degrades to the static core.
+  `app/robots.ts`: allow all, disallow `/api/`, sitemap reference.
+- The printable note's "Prepared" date is DATASET-RELATIVE (max sources
+  fetched_at) — never wall-clock (§7.1 discipline; also hydration-safe).
+- UI has no independent data logic — it renders API payloads. (No JS unit
+  tests by design; behavior is pinned at the API layer, rendering verified by
+  `npm run build`'s RSC compilation and deploy smoke checks. Revisit if UI
+  logic grows beyond rendering.)
 
 ## 16. Deployment & weekly pipeline
 
@@ -571,6 +599,9 @@ the reason and owner. The crosswalk test fails on any dangling reference.
 | INV-13.3 | Name→class mapping is conservative (estradiol maps to its 3+ classes incl. the anchor; unknown names map nowhere) | tests/test_backtest.py::test_estradiol_name_maps_to_te_rated_classes ; tests/test_backtest.py::test_unknown_name_maps_nowhere |
 | INV-13.4 | The replay never leaks post-cutoff data (quiet before data exists; fires at the horizon; empty members = 0) | tests/test_backtest.py::test_fires_at_the_fixture_horizon ; tests/test_backtest.py::test_quiet_before_the_data_exists ; tests/test_backtest.py::test_empty_members_zero |
 | INV-13.5 | The lead-time report counts unmapped listings honestly and finds the planted early-firing case | tests/test_backtest.py::test_report_over_planted_history |
+| INV-14.6 | /api/class/{slug} resolves the anchor class (Dotti in T1) and 404s helpfully on unknown slugs; /api/classes covers every latest-sweep class with unique slugs | tests/test_web.py::test_class_endpoint_resolves_by_slug ; tests/test_web.py::test_unknown_slug_404s_helpfully ; tests/test_web.py::test_classes_index_covers_every_class |
+| INV-14.7 | Class slugs are deterministic, unique across the fixture universe, URL-safe, capped, and punctuation-colliding keys stay distinct (hash suffix) | tests/test_classpage.py::test_deterministic ; tests/test_classpage.py::test_unique_across_fixture_universe ; tests/test_classpage.py::test_url_safe ; tests/test_classpage.py::test_long_keys_capped_but_unique ; tests/test_classpage.py::test_punctuation_only_keys_stay_distinct ; tests/test_classpage.py::test_anchor_class_addressable ; tests/test_classpage.py::test_empty_db_empty_index |
+| INV-14.8 | Resolutions carry class_ref (slug + key) for TE-rated seeds; human_strength labels render canonically with RAW honestly marked | tests/test_web.py::test_resolution_carries_class_ref ; tests/test_classpage.py::test_patch_rate ; tests/test_classpage.py::test_mass_milligrams ; tests/test_classpage.py::test_raw_is_honestly_labeled |
 | INV-14.1 | Web and CLI serve identical JSON (one serializer, JSON-native types, zero drift) | tests/test_web.py::test_web_json_matches_cli_json |
 | INV-14.2 | /api/resolve returns the corrected tiers; unknown NDC → 404 with detail | tests/test_web.py::test_anchor_resolves_with_corrected_tiers ; tests/test_web.py::test_unknown_ndc_is_404_with_detail |
 | INV-14.3 | /api/explain carries the Lyllana prescriber-authorization verdict; /api/signal carries components; /api/meta reports vintages | tests/test_web.py::test_lyllana_verdict ; tests/test_web.py::test_signal_components ; tests/test_web.py::test_vintages_reported |

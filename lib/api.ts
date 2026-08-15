@@ -60,8 +60,17 @@ export interface ClassAssessment {
   lines: string[];
 }
 
+export interface ClassRef {
+  slug: string;
+  ingredient_set: string;
+  df_route: string;
+  strength_norm: string;
+  te_code: string;
+}
+
 export interface Resolution {
   seed: AnnotatedEntry | null;
+  class_ref: ClassRef | null;
   seed_status: string;
   notes: string[];
   class_assessment: ClassAssessment | null;

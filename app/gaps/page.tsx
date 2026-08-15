@@ -1,16 +1,29 @@
-"use client";
-
+import type { Metadata } from "next";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { api, GapEntry, GapReport } from "@/lib/api";
+import { GapEntry } from "@/lib/api";
+import { serverApi } from "@/lib/api.server";
 import { SourceTag } from "@/components/SourceTag";
 
-function strengthLabel(strengthNorm: string): string {
-  // Canonical keys render human-first; unparsed upstream strengths show
-  // verbatim, honestly labeled.
-  if (strengthNorm.startsWith("UG24H:")) {
-    return `${strengthNorm.slice(6)} mcg/24hr`;
+export async function generateMetadata(): Promise<Metadata> {
+  try {
+    const report = await serverApi.gaps(1);
+    const unlisted = report.totals["unlisted_constraints"];
+    const listed = report.totals["fda_listed"];
+    return {
+      title: "The supply gap the FDA shortage list misses",
+      description:
+        `${unlisted} US drug classes show independent public evidence ` +
+        `consistent with a supply constraint while absent from FDA's ` +
+        `voluntary shortage list (which covers ${listed}). Updated weekly ` +
+        `from federal price, survey, volume, and recall data.`,
+    };
+  } catch {
+    return { title: "The supply gap the FDA shortage list misses" };
   }
+}
+
+function strengthLabel(strengthNorm: string): string {
+  if (strengthNorm.startsWith("UG24H:")) return `${strengthNorm.slice(6)} mcg/24hr`;
   if (strengthNorm.startsWith("UG:")) {
     const micrograms = Number(strengthNorm.slice(3));
     if (Number.isFinite(micrograms) && micrograms >= 1000) {
@@ -18,12 +31,8 @@ function strengthLabel(strengthNorm: string): string {
     }
     return `${strengthNorm.slice(3)} mcg`;
   }
-  if (strengthNorm.startsWith("PCT:")) {
-    return `${strengthNorm.slice(4).split(";")[0]}%`;
-  }
-  if (strengthNorm.startsWith("RAW:")) {
-    return `${strengthNorm.slice(4)} (as filed)`;
-  }
+  if (strengthNorm.startsWith("PCT:")) return `${strengthNorm.slice(4).split(";")[0]}%`;
+  if (strengthNorm.startsWith("RAW:")) return `${strengthNorm.slice(4)} (as filed)`;
   return strengthNorm || "?";
 }
 
@@ -107,20 +116,8 @@ function GapTable({
   );
 }
 
-export default function GapsPage() {
-  const [report, setReport] = useState<GapReport | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api
-      .gaps(100)
-      .then(setReport)
-      .catch((problem: Error) => setError(problem.message));
-  }, []);
-
-  if (error) return <div className="error-box">{error}</div>;
-  if (!report) return <div className="loading">Reading the latest sweep…</div>;
-
+export default async function GapsPage() {
+  const report = await serverApi.gaps(100);
   const unlistedTotal = report.totals["unlisted_constraints"];
   const listedTotal = report.totals["fda_listed"];
 
@@ -129,11 +126,12 @@ export default function GapsPage() {
       <section className="tier-section">
         <h2>The gap between the FDA shortage list and the public evidence</h2>
         <p className="lede">
-          Every week this site assesses all {report.sweep.class_count.toLocaleString()}{" "}
-          therapeutically-interchangeable drug classes in the US against four
-          independent public signals: acquisition-price spikes, products
-          vanishing from the federal price survey, national dispensed-volume
-          shocks, and recalls. As of {report.sweep.run_date}:{" "}
+          Every week this site assesses all{" "}
+          {report.sweep.class_count.toLocaleString()} therapeutically-
+          interchangeable drug classes in the US against four independent
+          public signals: acquisition-price spikes, products vanishing from
+          the federal price survey, national dispensed-volume shocks, and
+          recalls. As of {report.sweep.run_date}:{" "}
           <b>
             {unlistedTotal} classes show independent evidence consistent with
             a supply constraint while appearing nowhere on FDA&apos;s
@@ -150,8 +148,7 @@ export default function GapsPage() {
 
       <section className="tier-section">
         <h2>
-          Evidence-consistent constraints NOT on the FDA list (
-          {unlistedTotal})
+          Evidence-consistent constraints NOT on the FDA list ({unlistedTotal})
         </h2>
         <p className="tier-sub">
           Ranked by independent evidence strength, then breadth. Click a class

@@ -87,6 +87,67 @@ class TestSearchEndpoint:
         assert any(r["ndc11"] == "00378464226" for r in results)
 
 
+class TestClassEndpoints:
+    @pytest.fixture()
+    def swept_client(
+        self, loaded_db_path: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> TestClient:
+        import shutil
+
+        from ndcres.db import connect
+        from ndcres.sweep import persist_sweep, run_sweep
+
+        db_copy = tmp_path / "swept.db"
+        shutil.copy(loaded_db_path, db_copy)
+        conn = connect(db_copy)
+        persist_sweep(conn, run_sweep(conn))
+        conn.close()
+        monkeypatch.setenv("NDCRES_DB", str(db_copy))
+        from ndcres.web.app import app
+
+        return TestClient(app)
+
+    def test_class_endpoint_resolves_by_slug(
+        self, swept_client: TestClient
+    ) -> None:
+        from ndcres.classpage import class_slug
+
+        slug = class_slug("ESTRADIOL", "SYSTEM;TRANSDERMAL", "UG24H:50", "AB1")
+        payload = swept_client.get(f"/api/class/{slug}").json()
+        assert payload["class"]["rep_ndc11"] == "00378464226"
+        tier1 = {
+            entry["ndc11"] for entry in payload["resolution"]["tiers"]["T1"]
+        }
+        assert "65162099308" in tier1  # Dotti — the anchor golden holds
+
+    def test_unknown_slug_404s_helpfully(
+        self, swept_client: TestClient
+    ) -> None:
+        response = swept_client.get("/api/class/nonsense-00000000")
+        assert response.status_code == 404
+        assert "latest sweep" in response.json()["detail"]
+
+    def test_classes_index_covers_every_class(
+        self, swept_client: TestClient
+    ) -> None:
+        payload = swept_client.get("/api/classes").json()
+        assert payload["count"] == len(payload["classes"]) > 0
+        slugs = [entry["slug"] for entry in payload["classes"]]
+        assert len(slugs) == len(set(slugs))
+
+    def test_resolution_carries_class_ref(
+        self, swept_client: TestClient
+    ) -> None:
+        from ndcres.classpage import class_slug
+
+        payload = swept_client.get("/api/resolve/0378-4642-26").json()
+        ref = payload["class_ref"]
+        assert ref is not None
+        assert ref["slug"] == class_slug(
+            "ESTRADIOL", "SYSTEM;TRANSDERMAL", "UG24H:50", "AB1"
+        )
+
+
 class TestMetaEndpoint:
     def test_vintages_reported(self, client: TestClient) -> None:
         payload = client.get("/api/meta").json()

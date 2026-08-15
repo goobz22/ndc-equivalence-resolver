@@ -1,34 +1,45 @@
-"use client";
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { Explanation } from "@/lib/api";
+import { ApiError, serverApi } from "@/lib/api.server";
+import { PrintButton } from "@/components/PrintButton";
 
-import { use, useEffect, useState } from "react";
-import { api, Explanation } from "@/lib/api";
+export const metadata: Metadata = {
+  title: "Prescription availability note",
+  description:
+    "A printable, source-cited note for your pharmacist and prescriber " +
+    "when your exact prescription is out of stock.",
+};
 
-function today(): string {
-  return new Date().toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+async function fetchExplanation(
+  a: string,
+  b: string,
+): Promise<Explanation | null> {
+  try {
+    return await serverApi.explain(decodeURIComponent(a), decodeURIComponent(b));
+  } catch (problem) {
+    if (problem instanceof ApiError && problem.status === 404) return null;
+    throw problem;
+  }
 }
 
-export default function NotePage({
+function preparedDate(explanation: Explanation): string {
+  // Dataset-relative, never wall-clock: the note is prepared FROM data,
+  // so it is honestly dated BY the data (SPEC §7.1 discipline).
+  const dates = Object.values(explanation.sources ?? {})
+    .map((ref) => ref.fetched_at?.slice(0, 10))
+    .filter((d): d is string => Boolean(d));
+  return dates.length > 0 ? dates.sort()[dates.length - 1] : "unknown";
+}
+
+export default async function NotePage({
   params,
 }: {
   params: Promise<{ a: string; b: string }>;
 }) {
-  const { a, b } = use(params);
-  const [explanation, setExplanation] = useState<Explanation | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api
-      .explain(decodeURIComponent(a), decodeURIComponent(b))
-      .then(setExplanation)
-      .catch((problem: Error) => setError(problem.message));
-  }, [a, b]);
-
-  if (error) return <div className="error-box">{error}</div>;
-  if (!explanation) return <div className="loading">Preparing the note…</div>;
+  const { a, b } = await params;
+  const explanation = await fetchExplanation(a, b);
+  if (!explanation) notFound();
 
   const current = explanation.left;
   const requested = explanation.right;
@@ -40,15 +51,16 @@ export default function NotePage({
   return (
     <>
       <div className="note-actions">
-        <button onClick={() => window.print()}>Print this note</button>
+        <PrintButton label="Print this note" />
       </div>
 
       <div className="note-sheet">
         <h2>Prescription availability note</h2>
         <p className="sub">
-          Prepared {today()} from public FDA/NLM/CMS reference data via the
-          open-source NDC Equivalence Resolver. For discussion with your
-          pharmacist and prescriber — this is not medical advice.
+          Prepared from public FDA/NLM/CMS reference data (fetched{" "}
+          {preparedDate(explanation)}) via the open-source NDC Equivalence
+          Resolver. For discussion with your pharmacist and prescriber — this
+          is not medical advice.
         </p>
 
         <div className="field">
@@ -134,7 +146,9 @@ export default function NotePage({
           <p style={{ fontSize: "0.8rem" }}>
             {Object.values(explanation.sources ?? {})
               .filter((ref) => ref.fetched_at)
-              .map((ref) => `${ref.name} (fetched ${ref.fetched_at?.slice(0, 10)})`)
+              .map(
+                (ref) => `${ref.name} (fetched ${ref.fetched_at?.slice(0, 10)})`,
+              )
               .join(" · ")}
             {" — "}all U.S. federal public data; verification and methodology:
             ndc-equivalence-resolver.vercel.app/sources

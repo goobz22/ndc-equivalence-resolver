@@ -1,21 +1,16 @@
-"use client";
+import type { Metadata } from "next";
+import { serverApi } from "@/lib/api.server";
 
-import { useEffect, useState } from "react";
-import { api, SourceRefs } from "@/lib/api";
+export const metadata: Metadata = {
+  title: "Data sources & provenance",
+  description:
+    "Every number on this site comes from a public federal dataset, fetched " +
+    "by an open-source pipeline and stored with its checksum and vintage.",
+};
 
-export default function SourcesPage() {
-  const [registry, setRegistry] = useState<SourceRefs | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api
-      .meta()
-      .then((payload) => setRegistry(payload.registry))
-      .catch((problem: Error) => setError(problem.message));
-  }, []);
-
-  if (error) return <div className="error-box">{error}</div>;
-  if (!registry) return <div className="loading">Loading sources…</div>;
+export default async function SourcesPage() {
+  const meta = await serverApi.meta();
+  const registry = meta.registry;
 
   return (
     <section className="tier-section">
@@ -48,25 +43,26 @@ export default function SourcesPage() {
             </p>
           ) : null}
           {ref.sha256 ? (
-            <p className="sub" style={{ marginTop: "0.2rem", wordBreak: "break-all" }}>
+            <p
+              className="sub"
+              style={{ marginTop: "0.2rem", wordBreak: "break-all" }}
+            >
               SHA-256: {ref.sha256}
             </p>
           ) : null}
         </div>
       ))}
       <p className="tier-sub">
-        The exact fetch-and-parse code for each source is public:
-        {" "}
+        The exact fetch-and-parse code for each source is public:{" "}
         <a
           href="https://github.com/goobz22/ndc-equivalence-resolver"
           target="_blank"
           rel="noreferrer"
         >
           github.com/goobz22/ndc-equivalence-resolver
-        </a>
-        {" "}
-        — see <code>src/ndcres/ingest/</code> and the specification in
-        {" "}<code>docs/SPEC.md</code>.
+        </a>{" "}
+        — see <code>src/ndcres/ingest/</code> and the specification in{" "}
+        <code>docs/SPEC.md</code>.
       </p>
     </section>
   );

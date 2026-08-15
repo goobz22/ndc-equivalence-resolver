@@ -107,6 +107,71 @@ def api_search(
     )
 
 
+@app.get("/api/classes")
+def api_classes(conn: sqlite3.Connection = Depends(get_conn)) -> dict[str, Any]:
+    from ..classpage import slug_index
+    from ..sweep import latest_sweep_id
+
+    sweep_id = latest_sweep_id(conn)
+    if sweep_id is None:
+        raise HTTPException(
+            status_code=404,
+            detail="no sweep in this database — class pages need one",
+        )
+    run = conn.execute(
+        "SELECT run_date FROM sweep_run WHERE sweep_id = ?", (sweep_id,)
+    ).fetchone()
+    index = slug_index(conn)
+    return {
+        "sweep": {"sweep_id": sweep_id, "run_date": run["run_date"]},
+        "count": len(index),
+        "classes": [
+            {
+                "slug": entry["slug"],
+                "ingredient_set": entry["ingredient_set"],
+                "df_route": entry["df_route"],
+                "strength_norm": entry["strength_norm"],
+                "te_code": entry["te_code"],
+                "rep_ndc11": entry["rep_ndc11"],
+                "verdict": entry["verdict"],
+            }
+            for entry in index.values()
+        ],
+        "sources": source_refs(conn),
+        "disclaimer": DISCLAIMER,
+    }
+
+
+@app.get("/api/class/{slug}")
+def api_class(
+    slug: str, conn: sqlite3.Connection = Depends(get_conn)
+) -> dict[str, Any]:
+    from ..classpage import slug_index
+
+    entry = slug_index(conn).get(slug)
+    if entry is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "no equivalence class with this address in the latest sweep "
+                "— it may have left the market, or the link is stale"
+            ),
+        )
+    return {
+        "slug": slug,
+        "class": {
+            key: value
+            for key, value in entry.items()
+            if key not in ("slug", "sweep_id")
+        },
+        "resolution": resolution_dict(
+            run_resolve(conn, entry["rep_ndc11"]), sources=source_refs(conn)
+        ),
+        "sources": source_refs(conn),
+        "disclaimer": DISCLAIMER,
+    }
+
+
 @app.get("/api/gaps")
 def api_gaps(
     limit: int = Query(default=100, ge=1, le=500),
