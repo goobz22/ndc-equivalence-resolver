@@ -80,7 +80,8 @@ def _kind(result: dict[str, Any]) -> str:
 
 def _location_address(result: dict[str, Any]) -> dict[str, Any] | None:
     # LOCATION only: MAILING addresses route to corporate offices.
-    for address in result.get("addresses") or []:
+    addresses: list[dict[str, Any]] = list(result.get("addresses") or [])
+    for address in addresses:
         if address.get("address_purpose") == "LOCATION":
             return address
     return None
