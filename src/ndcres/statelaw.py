@@ -16,8 +16,8 @@ Curation rules:
   citable secondary sources ships substitution='unverified' and the UI
   falls back to the generic sentence — never guessed.
 - `as_of` is the research access date, always rendered. Rendered
-  language always carries "Not legal advice — the statute text
-  controls."
+  language always carries the DISCLAIMER constant ("Not legal
+  advice - the statute text controls").
 
 This is REFERENCE information about public law, not pipeline data —
 served by the API (no DB dependency), rendered by the note page.

@@ -340,6 +340,32 @@ consumer; until then the tables only accumulate. CLI:
 `ndcres membership-snapshot [--history PATH]`; weekly workflow runs it between
 the FDA-list snapshot and the sweep.
 
+### 10.4 Watch feeds (`src/ndcres/feeds.py`)
+
+Retention is the instrument's memory problem in reverse: the archive remembers
+for us; feeds let a READER remember a drug. RSS 2.0, built with `xml.etree`
+(never hand-templated strings — ingredient names contain `'()%&`;
+hand-templating means hand-escaping, exactly the bug class ElementTree kills).
+
+- **`GET /api/feeds/gaps.xml`** — classes that ENTERED or LEFT the
+  unlisted-constraint set (or the FDA list) between the two most recent sweeps
+  in the serving database. **`GET /api/feeds/class/{slug}.xml`** — one class's
+  verdict changes across the exported window plus a current-state item
+  (newest first); unknown slug → 404. Both: `application/rss+xml`, 1h cache.
+- **A feed URL must ALWAYS parse**: fewer than two sweeps yields a valid
+  EMPTY channel, never an error page (readers poll unattended).
+- **Determinism discipline**: pubDate derives from sweep `run_date`
+  (dataset-relative, never wall-clock); guids are stable functions
+  (`{slug}@{sweep_id}:{transition}`); items emit in fixed sort order;
+  byte-identical output for identical input (pinned).
+- **Export window**: the web artifact carries the latest **13 sweeps** (one
+  quarter of weekly transitions, ~0.8MB/sweep — inside the 176MiB gate's
+  budget math, §16); the FULL longitudinal record stays in ndcres-history.db.
+- Surfaces: RSS autodiscovery `<link>` in the site layout; "Watch" links on
+  /gaps and /class pages; robots allows /api/feeds/ (crawlable freshness
+  signal) while the rest of /api/ stays disallowed.
+- NOT: no Atom, no WebSub/ping, no per-NDC feeds, no email.
+
 ### 10.2 Longitudinal history (`src/ndcres/history.py`, Phase 4 — landed)
 
 FDA deletes resolved shortage records instead of keeping history (HHS/ASPE had
@@ -685,6 +711,9 @@ the reason and owner. The crosswalk test fails on any dangling reference.
 | INV-7.8 | Directory-exit fires only on silent RX-active exits (planted); end-marketed vanishes never fire; without two snapshots the axis is None, reads "accumulating", and never counts toward fingerprints; the payload carries the axis count | tests/test_class_assessment.py::test_fires_on_planted_silent_exits ; tests/test_class_assessment.py::test_end_marketed_vanish_never_fires ; tests/test_class_assessment.py::test_none_without_two_snapshots_and_never_counts ; tests/test_class_assessment.py::test_payload_carries_axis_count |
 | INV-10.11 | Pre-5-axis archives gain the new sweep_class columns via the additive shim, with historical rows honestly NULL | tests/test_history.py::test_old_archive_gains_columns_via_shim |
 | INV-16.3 | The membership window ships in the web export so the serving path computes the same directory-exit axis | tests/test_export.py::test_membership_tables_ship |
+| INV-10.12 | A planted verdict flip produces a transition item with a stable guid and a dataset-relative date; no change yields no items; a single sweep yields a VALID empty channel; rendered output is byte-deterministic; hostile names survive escaping | tests/test_feeds.py::test_planted_flip_produces_transition_item ; tests/test_feeds.py::test_no_change_no_items ; tests/test_feeds.py::test_single_sweep_yields_valid_empty_channel ; tests/test_feeds.py::test_deterministic_bytes ; tests/test_feeds.py::test_escaping_survives_hostile_names |
+| INV-10.13 | The class feed carries verdict-change + current-state items newest-first and misses cleanly on unknown slugs; the export window keeps 13 sweeps and drops the oldest beyond it | tests/test_feeds.py::test_history_carries_change_and_current ; tests/test_feeds.py::test_unknown_slug_returns_none ; tests/test_feeds.py::test_oldest_sweep_excluded_beyond_13 ; tests/test_export.py::test_export_ships_sweeps_within_the_window |
+| INV-14.9 | The feed endpoints serve parseable RSS with the right media type and cache header; the class feed 404s on unknown slugs and leads with the current-state item | tests/test_web.py::test_gaps_feed_serves_parseable_rss ; tests/test_web.py::test_class_feed_404s_on_unknown_slug ; tests/test_web.py::test_class_feed_serves_current_state |
 | INV-20.1 | All 51 jurisdictions present exactly once; every row format-valid (enum, https statute URL, ISO as_of, non-empty override + citation); unverified rows are the bounded exception | tests/test_statelaw.py::test_all_51_jurisdictions_present_exactly_once ; tests/test_statelaw.py::test_row_format ; tests/test_statelaw.py::test_unverified_rows_are_the_exception |
 | INV-20.2 | Statute-verified goldens hold (FL mandatory + MEDICALLY NECESSARY + may-refuse; NY §6810 daw box; MA mandatory; CT cited) | tests/test_statelaw.py::test_florida_mandatory_with_medically_necessary ; tests/test_statelaw.py::test_new_york_daw_box ; tests/test_statelaw.py::test_massachusetts_mandatory ; tests/test_statelaw.py::test_connecticut_rule_present_and_cited |
 | INV-20.3 | The statelaw payload carries the not-legal-advice disclaimer and the full field set; lookup normalizes and misses cleanly | tests/test_statelaw.py::test_payload_shape_and_disclaimer ; tests/test_statelaw.py::test_lookup_normalizes ; tests/test_statelaw.py::test_unknown_returns_none |

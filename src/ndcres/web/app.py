@@ -17,7 +17,7 @@ import os
 import sqlite3
 from typing import Any, Iterator
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Response
 
 from ..db import connect_readonly, default_db_path
 from ..explain import explain as run_explain
@@ -197,6 +197,56 @@ def api_dossier(
         return dossier_dict(build_dossier(conn, ndc))
     except (NdcError, ResolveError) as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.get("/api/feeds/gaps.xml")
+def api_feed_gaps(conn: sqlite3.Connection = Depends(get_conn)) -> Response:
+    from ..feeds import gaps_transitions, render_rss
+
+    body = render_rss(
+        title="NDC Equivalence Resolver - gap-report changes",
+        link="https://ndc-equivalence-resolver.vercel.app/gaps",
+        description=(
+            "Equivalence classes entering or leaving the "
+            "unlisted-constraint set (or the FDA shortage list) between "
+            "weekly sweeps. Probabilistic evidence from public data."
+        ),
+        items=gaps_transitions(conn),
+    )
+    return Response(
+        content=body,
+        media_type="application/rss+xml",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@app.get("/api/feeds/class/{slug}.xml")
+def api_feed_class(
+    slug: str, conn: sqlite3.Connection = Depends(get_conn)
+) -> Response:
+    from ..feeds import class_history_items, render_rss
+
+    items = class_history_items(conn, slug)
+    if items is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"unknown class slug {slug!r} - see /api/classes",
+        )
+    body = render_rss(
+        title=f"NDC Equivalence Resolver - class watch: {slug}",
+        link=f"https://ndc-equivalence-resolver.vercel.app/class/{slug}",
+        description=(
+            "Weekly verdict history for one equivalence class. "
+            "Probabilistic evidence from public data - never a statement "
+            "of availability."
+        ),
+        items=items,
+    )
+    return Response(
+        content=body,
+        media_type="application/rss+xml",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @app.get("/api/statelaw")

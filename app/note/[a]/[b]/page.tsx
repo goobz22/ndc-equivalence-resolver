@@ -85,28 +85,34 @@ export default async function NotePage({
   searchParams,
 }: {
   params: Promise<{ a: string; b: string }>;
-  searchParams: Promise<{ state?: string }>;
+  searchParams: Promise<{ state?: string | string[] }>;
 }) {
   const { a, b } = await params;
   const { state } = await searchParams;
+  // A repeated ?state= param arrives as an array — take the first, and
+  // degrade to the generic sentence on anything unrecognized.
+  const stateCode = Array.isArray(state) ? state[0] : state;
   const explanation = await fetchExplanation(a, b);
   if (!explanation) notFound();
-  let statelaw: StatelawPayload | null = null;
-  try {
-    statelaw = await serverApi.statelaw();
-  } catch {
-    statelaw = null; // the note still renders with the generic sentence
-  }
-  const stateRule =
-    state && statelaw
-      ? (statelaw.states.find(
-          (entry) => entry.state === state.trim().toUpperCase(),
-        ) ?? null)
-      : null;
-
   const current = explanation.left;
   const requested = explanation.right;
   const isDirect = explanation.verdict === "T1" || explanation.verdict === "T2";
+  let statelaw: StatelawPayload | null = null;
+  if (isDirect) {
+    // State substitution rules govern DIRECT (T1/T2) swaps only — on a
+    // not-a-substitute note the block would contradict the verdict.
+    try {
+      statelaw = await serverApi.statelaw();
+    } catch {
+      statelaw = null; // the note still renders with the generic sentence
+    }
+  }
+  const stateRule =
+    stateCode && statelaw
+      ? (statelaw.states.find(
+          (entry) => entry.state === stateCode.trim().toUpperCase(),
+        ) ?? null)
+      : null;
   const dims = Object.fromEntries(
     explanation.dimensions.map((line) => [line.dimension, line]),
   );
