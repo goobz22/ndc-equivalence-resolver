@@ -236,7 +236,7 @@ export const TIER_TITLES: Record<string, string> = {
 };
 
 export const TIER_SUBTITLES: Record<string, string> = {
-  T1: "Same FDA therapeutic-equivalence subgroup, strength, schedule, and package size. A pharmacist can usually substitute these without contacting your prescriber (state rules vary).",
+  T1: "Same FDA therapeutic-equivalence subgroup, strength, schedule, and package size. A pharmacist can usually substitute these without contacting your prescriber (state rules vary — the printable note shows your state's exact rule).",
   T2: "Therapeutically equivalent, but the prescription quantity must be adjusted.",
   T3: "Same medicine family, but NOT an automatic substitute — a prescriber must write a new or amended prescription naming the product.",
   T4: "Same molecule by a different route or form. Informational only; switching is a clinical decision.",

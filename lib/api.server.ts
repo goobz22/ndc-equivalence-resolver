@@ -115,6 +115,24 @@ export interface DossierPayload {
   disclaimer: string;
 }
 
+export interface StateRule {
+  state: string;
+  name: string;
+  substitution: "mandatory" | "permissive" | "unverified";
+  patient_consent_required: boolean | null;
+  patient_notification_required: boolean | null;
+  patient_may_refuse: boolean | null;
+  prescriber_override: string;
+  statute_citation: string;
+  statute_url: string;
+  as_of: string;
+}
+
+export interface StatelawPayload {
+  disclaimer: string;
+  states: StateRule[];
+}
+
 export interface MetaPayload {
   sources: { source: string; fetched_at: string; vintage: string | null }[];
   registry: SourceRefs;
@@ -140,4 +158,6 @@ export const serverApi = {
       classes: ClassIndexEntry[];
     }>("/api/classes", 86400),
   meta: () => serverGet<MetaPayload>("/api/meta"),
+  // Curated public-law reference; changes only with a code deploy.
+  statelaw: () => serverGet<StatelawPayload>("/api/statelaw", 86400),
 };

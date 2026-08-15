@@ -1,8 +1,14 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Explanation } from "@/lib/api";
-import { ApiError, serverApi } from "@/lib/api.server";
+import {
+  ApiError,
+  serverApi,
+  StatelawPayload,
+  StateRule,
+} from "@/lib/api.server";
 import { PrintButton } from "@/components/PrintButton";
+import { StatePicker } from "@/components/StatePicker";
 
 export const metadata: Metadata = {
   title: "Prescription availability note",
@@ -32,14 +38,71 @@ function preparedDate(explanation: Explanation): string {
   return dates.length > 0 ? dates.sort()[dates.length - 1] : "unknown";
 }
 
+// The assembled rule sentence for a direct (T1/T2) substitution — the
+// exact language replaces "in most states". Wording stays
+// statute-anchored and probabilistic-free: the law is citable fact.
+function StateLawBlock({
+  rule,
+  disclaimer,
+}: {
+  rule: StateRule;
+  disclaimer: string;
+}) {
+  if (rule.substitution === "unverified") return null;
+  const kind =
+    rule.substitution === "mandatory"
+      ? "the pharmacist is generally REQUIRED to substitute an FDA-rated " +
+        "equivalent (unless the prescriber has blocked substitution)"
+      : "the pharmacist MAY substitute an FDA-rated equivalent";
+  const clauses: string[] = [];
+  if (rule.patient_consent_required === true)
+    clauses.push("patient consent is required before substitution");
+  if (rule.patient_notification_required === true)
+    clauses.push("the patient must be notified of the substitution");
+  if (rule.patient_may_refuse === true)
+    clauses.push("the purchaser may refuse the substitution");
+  return (
+    <div className="field">
+      <b>State substitution rule — {rule.name}</b>
+      <p>
+        Under {rule.statute_citation}, {kind}
+        {clauses.length > 0 ? `; ${clauses.join("; ")}` : ""}. Prescriber
+        override mechanism: {rule.prescriber_override}
+      </p>
+      <p style={{ fontSize: "0.8rem" }}>
+        As of {rule.as_of}, per{" "}
+        <a href={rule.statute_url} target="_blank" rel="noreferrer">
+          {rule.statute_citation}
+        </a>
+        . {disclaimer}
+      </p>
+    </div>
+  );
+}
+
 export default async function NotePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ a: string; b: string }>;
+  searchParams: Promise<{ state?: string }>;
 }) {
   const { a, b } = await params;
+  const { state } = await searchParams;
   const explanation = await fetchExplanation(a, b);
   if (!explanation) notFound();
+  let statelaw: StatelawPayload | null = null;
+  try {
+    statelaw = await serverApi.statelaw();
+  } catch {
+    statelaw = null; // the note still renders with the generic sentence
+  }
+  const stateRule =
+    state && statelaw
+      ? (statelaw.states.find(
+          (entry) => entry.state === state.trim().toUpperCase(),
+        ) ?? null)
+      : null;
 
   const current = explanation.left;
   const requested = explanation.right;
@@ -52,6 +115,14 @@ export default async function NotePage({
     <>
       <div className="note-actions">
         <PrintButton label="Print this note" />
+        {statelaw ? (
+          <StatePicker
+            states={statelaw.states.map(({ state: code, name }) => ({
+              state: code,
+              name,
+            }))}
+          />
+        ) : null}
       </div>
 
       <div className="note-sheet">
@@ -103,13 +174,22 @@ export default async function NotePage({
           {isDirect ? (
             <p>
               These products are FDA-rated therapeutically equivalent (same
-              Orange Book three-character TE code under the same heading). In
-              most states the pharmacist may substitute directly
+              Orange Book three-character TE code under the same heading).{" "}
+              {stateRule && stateRule.substitution !== "unverified"
+                ? `Under ${stateRule.name} law the pharmacist ${
+                    stateRule.substitution === "mandatory"
+                      ? "is generally required to"
+                      : "may"
+                  } substitute directly`
+                : "In most states the pharmacist may substitute directly"}
               {explanation.verdict === "T2"
                 ? ", with a quantity adjustment on the prescription"
                 : ""}
               . No new prescription should be needed — this note is for
               confirmation.
+              {!stateRule
+                ? " (Choose your state above for the exact rule.)"
+                : ""}
             </p>
           ) : (
             <p>
@@ -131,6 +211,10 @@ export default async function NotePage({
             </p>
           )}
         </div>
+
+        {stateRule && statelaw ? (
+          <StateLawBlock rule={stateRule} disclaimer={statelaw.disclaimer} />
+        ) : null}
 
         <div className="field">
           <b>Prescriber decision</b>

@@ -199,6 +199,14 @@ def api_dossier(
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
+@app.get("/api/statelaw")
+def api_statelaw() -> dict[str, Any]:
+    # Curated public-law reference (SPEC §20) — no DB dependency.
+    from ..statelaw import statelaw_payload
+
+    return statelaw_payload()
+
+
 @app.get("/api/meta")
 def api_meta(conn: sqlite3.Connection = Depends(get_conn)) -> dict[str, Any]:
     rows = conn.execute(

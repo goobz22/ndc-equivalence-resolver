@@ -563,6 +563,36 @@ serves only incoming browser requests from the remaining client islands.
 - Upstream data is preserved verbatim where quoted (including upstream typos);
   corrections happen only via the cited `special_case` mechanism.
 
+## 20. State substitution law (`src/ndcres/statelaw.py`)
+
+The note page's job is prescriber-facing exactness — "in most states" is 51
+different laws doing the work of one sentence. This section replaces it with
+the reader's actual state rule.
+
+- **`StateRule`**: state, name, substitution (`mandatory` | `permissive` |
+  `unverified`), patient_consent_required / patient_notification_required /
+  patient_may_refuse (`bool | None`, None = unknown), prescriber_override
+  (exact mechanism), statute_citation, statute_url, as_of (research access
+  date, always rendered).
+- **Curation standard**: every row verified against the STATUTE itself
+  (public domain) or two agreeing citable secondary sources (Sacks et al.,
+  JAMA Internal Medicine 2020, open access; CT OLR 2013-R-0071); NABP's
+  license-restricted survey is never used. A row failing verification ships
+  `substitution='unverified'` and the UI falls back to the generic sentence —
+  never guessed. Evidence: docs/dossiers/2026-08-statelaw-research.md.
+- **Serving**: `GET /api/statelaw` (no DB dependency; the table changes only
+  with a code deploy). The note page reads `?state=XX` from the URL
+  (stateless, shareable, printable — the no-tracking promise, §17); the
+  StatePicker island does `router.replace`. Selected state + a T1/T2 verdict
+  assemble the exact language (mandatory/permissive + override mechanism +
+  consent/notification/refusal clauses) + "as of {date}, per {statute link}"
+  + the not-legal-advice disclaimer. No state chosen → the generic sentence
+  plus a picker prompt. State law does NOT surface on /ndc or /class (keeps
+  the SSR cache one variant, not 51) — the note is the artifact that travels.
+- **v1 limitations (deliberate)**: no biosimilar or controlled-substance
+  carve-outs (the tiers themselves already exclude what federal law
+  excludes); no geo auto-detection; no storage of the choice.
+
 ## 19. Invariant → test traceability
 
 Reference grammar: `tests/<file>::<test_name>` (class names omitted; parameterized
@@ -655,6 +685,9 @@ the reason and owner. The crosswalk test fails on any dangling reference.
 | INV-7.8 | Directory-exit fires only on silent RX-active exits (planted); end-marketed vanishes never fire; without two snapshots the axis is None, reads "accumulating", and never counts toward fingerprints; the payload carries the axis count | tests/test_class_assessment.py::test_fires_on_planted_silent_exits ; tests/test_class_assessment.py::test_end_marketed_vanish_never_fires ; tests/test_class_assessment.py::test_none_without_two_snapshots_and_never_counts ; tests/test_class_assessment.py::test_payload_carries_axis_count |
 | INV-10.11 | Pre-5-axis archives gain the new sweep_class columns via the additive shim, with historical rows honestly NULL | tests/test_history.py::test_old_archive_gains_columns_via_shim |
 | INV-16.3 | The membership window ships in the web export so the serving path computes the same directory-exit axis | tests/test_export.py::test_membership_tables_ship |
+| INV-20.1 | All 51 jurisdictions present exactly once; every row format-valid (enum, https statute URL, ISO as_of, non-empty override + citation); unverified rows are the bounded exception | tests/test_statelaw.py::test_all_51_jurisdictions_present_exactly_once ; tests/test_statelaw.py::test_row_format ; tests/test_statelaw.py::test_unverified_rows_are_the_exception |
+| INV-20.2 | Statute-verified goldens hold (FL mandatory + MEDICALLY NECESSARY + may-refuse; NY §6810 daw box; MA mandatory; CT cited) | tests/test_statelaw.py::test_florida_mandatory_with_medically_necessary ; tests/test_statelaw.py::test_new_york_daw_box ; tests/test_statelaw.py::test_massachusetts_mandatory ; tests/test_statelaw.py::test_connecticut_rule_present_and_cited |
+| INV-20.3 | The statelaw payload carries the not-legal-advice disclaimer and the full field set; lookup normalizes and misses cleanly | tests/test_statelaw.py::test_payload_shape_and_disclaimer ; tests/test_statelaw.py::test_lookup_normalizes ; tests/test_statelaw.py::test_unknown_returns_none |
 | INV-9.1 | Every ingest source and every derived table has a registry identity; refs merge live run state (url + fetched_at present after ingest) | tests/test_provenance.py::test_every_ingest_source_has_identity ; tests/test_provenance.py::test_derived_tables_have_identity_too ; tests/test_provenance.py::test_refs_merge_live_run_state |
 | INV-9.2 | Orange Book / RxNav deep links build correctly and refuse garbage | tests/test_provenance.py::test_anda_deep_link ; tests/test_provenance.py::test_nda_deep_link_pads_to_six ; tests/test_provenance.py::test_rxnav_link ; tests/test_provenance.py::test_garbage_and_none_yield_none |
 | INV-9.3 | Every payload (resolution/explanation/signal/search) carries a complete sources map — and the walker itself fails on stripped provenance (planted defect) | tests/test_provenance.py::test_resolution_payload ; tests/test_provenance.py::test_explanation_payload ; tests/test_provenance.py::test_signal_payload ; tests/test_provenance.py::test_search_payload ; tests/test_provenance.py::test_the_walker_actually_fails_on_stripped_provenance |
